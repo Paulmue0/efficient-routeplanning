@@ -135,6 +135,14 @@ func (g *Graph) RemoveEdge(source Vertex, edge Edge) error {
 	return nil
 }
 
+func (g *Graph) Degree(vertex Vertex) (int, error) {
+	edges, err := g.Search(vertex)
+	if err != nil {
+		return 0, err
+	}
+	return len(edges), nil
+}
+
 type Vertex struct {
 	Id VertexId
 }
