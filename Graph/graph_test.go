@@ -228,6 +228,38 @@ func TestNeighbors(t *testing.T) {
 	})
 }
 
+func TestAdjacent(t *testing.T) {
+	g := NewGraph()
+	v1 := Vertex{1}
+	v2 := Vertex{2}
+	g.AddVertex(v1)
+	g.AddVertex(v2)
+	g.AddEdge(v1, Edge{Target: v2, Weight: 1})
+
+	t.Run("is adjacent", func(t *testing.T) {
+		ok, err := g.Adjacent(v1, v2)
+		assertError(t, err, nil)
+		if !ok {
+			t.Errorf("expected vertices to be adjacent")
+		}
+	})
+
+	t.Run("not adjacent", func(t *testing.T) {
+		v3 := Vertex{3}
+		g.AddVertex(v3)
+		ok, err := g.Adjacent(v2, v3)
+		assertError(t, err, nil)
+		if ok {
+			t.Errorf("expected vertices to not be adjacent")
+		}
+	})
+
+	t.Run("unknown vertex", func(t *testing.T) {
+		_, err := g.Adjacent(Vertex{99}, v1)
+		assertError(t, err, ErrVertexNotFound)
+	})
+}
+
 func assertError(t testing.TB, got error, want error) {
 	t.Helper()
 
