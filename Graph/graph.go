@@ -93,13 +93,19 @@ func (g *Graph) AddVertex(x Vertex) error {
 
 // *   - Remove_edge(G, x, y): removes the edge from the vertex x to the vertex y, if it is there;
 func (g *Graph) RemoveVertex(x Vertex) error {
-	edges, err := g.Search(x)
-	if err == ErrVertexNotFound {
+	if _, ok := g.AdjacencyList[x]; !ok {
 		return ErrVertexNotFound
 	}
-	for _, edge := range edges {
-		g.RemoveEdge(x, edge)
+	for v, edges := range g.AdjacencyList {
+		newEdges := make([]Edge, 0)
+		for _, e := range edges {
+			if e.Target != x {
+				newEdges = append(newEdges, e)
+			}
+		}
+		g.AdjacencyList[v] = newEdges
 	}
+
 	delete(g.AdjacencyList, x)
 	return nil
 }
