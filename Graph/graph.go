@@ -84,8 +84,7 @@ func (g *Graph) ExistsEdge(v Vertex, e Edge) (bool, error) {
 
 // *   - Add_vertex(G, x): adds the vertex x, if it is not there;
 func (g *Graph) AddVertex(x Vertex) error {
-	_, err := g.Search(x)
-	if err != ErrVertexNotFound {
+	if _, exists := g.AdjacencyList[x]; exists {
 		return ErrVertexAlreadyExists
 	}
 	g.AdjacencyList[x] = []Edge{}
