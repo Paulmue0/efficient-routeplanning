@@ -76,6 +76,46 @@ func TestRemoveVertex(t *testing.T) {
 
 		assertError(t, err, want)
 	})
+	t.Run("remove incoming edges", func(t *testing.T) {
+		g := NewGraph()
+		v1 := Vertex{1}
+		v2 := Vertex{2}
+		v3 := Vertex{3}
+
+		g.AddVertex(v1)
+		g.AddVertex(v2)
+		g.AddVertex(v3)
+
+		g.AddEdge(v2, Edge{Target: v1, Weight: 5})
+		g.AddEdge(v3, Edge{Target: v1, Weight: 10})
+
+		err := g.RemoveVertex(v1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if _, exists := g.AdjacencyList[v1]; exists {
+			t.Errorf("expected vertex %v to be removed", v1)
+		}
+
+		for _, v := range []Vertex{v2, v3} {
+			for _, edge := range g.AdjacencyList[v] {
+				if edge.Target == v1 {
+					t.Errorf("expected no incoming edge to %v from %v", v1, v)
+				}
+			}
+		}
+	})
+	t.Run("idempotency", func(t *testing.T) {
+		g := NewGraph()
+		v := Vertex{1}
+		g.AddVertex(v)
+
+		_ = g.RemoveVertex(v)
+		err := g.RemoveVertex(v)
+
+		assertError(t, err, ErrVertexNotFound)
+	})
 }
 
 func TestAddEdge(t *testing.T) {
@@ -197,18 +237,21 @@ func assertError(t testing.TB, got error, want error) {
 }
 
 func assertInt(t testing.TB, got int, want int) {
+	t.Helper()
 	if got != want {
 		t.Errorf("expected %d got %d", want, got)
 	}
 }
 
 func assertStrings(t testing.TB, got string, want string) {
+	t.Helper()
 	if got != want {
 		t.Errorf("expected %s got %s", want, got)
 	}
 }
 
 func assertSlice[T Vertex | Edge](t testing.TB, got []T, want []T) {
+	t.Helper()
 	if !slices.Equal(got, want) {
 		t.Errorf("expected %q got %q", want, got)
 	}
