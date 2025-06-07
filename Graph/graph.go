@@ -32,10 +32,12 @@ type RoadNetwork struct {
 	Network  *Graph
 }
 
+// TODO: Proper print function for debugging and testing
 func NewRoadNetwork() *RoadNetwork {
 	return &RoadNetwork{}
 }
 
+// TODO: Proper print function for debugging and testing
 type Graph struct {
 	AdjacencyList map[Vertex][]Edge
 }

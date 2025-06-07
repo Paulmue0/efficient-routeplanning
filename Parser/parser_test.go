@@ -27,14 +27,14 @@ var (
 )
 
 func TestNewRoadNetwork(t *testing.T) {
-	Vertex0 := graph.Vertex{3, 48.667019, 9.245514}
-	Vertex1 := graph.Vertex{2, 48.667598, 9.244326}
-	Vertex2 := graph.Vertex{1, 48.667273, 9.244867}
-	Vertex3 := graph.Vertex{0, 48.667421, 9.244557}
+	Vertex0 := graph.Vertex{Id: 3, Lat: 48.667019, Lon: 9.245514}
+	Vertex1 := graph.Vertex{Id: 2, Lat: 48.667598, Lon: 9.244326}
+	Vertex2 := graph.Vertex{Id: 1, Lat: 48.667273, Lon: 9.244867}
+	Vertex3 := graph.Vertex{Id: 0, Lat: 48.667421, Lon: 9.244557}
 
-	Edge0 := graph.Edge{Vertex1, 1}
-	Edge1 := graph.Edge{Vertex2, 1}
-	Edge2 := graph.Edge{Vertex3, 1}
+	Edge0 := graph.Edge{Target: Vertex1, Weight: 1}
+	Edge1 := graph.Edge{Target: Vertex2, Weight: 1}
+	Edge2 := graph.Edge{Target: Vertex3, Weight: 1}
 
 	mockGraph.AddVertex(Vertex0)
 	mockGraph.AddVertex(Vertex1)

@@ -29,6 +29,7 @@ func newNetwork(networkFile io.Reader) (graph.RoadNetwork, error) {
 
 	scanner.Scan()
 	numNodes, err := strconv.Atoi(scanner.Text())
+	check(err)
 
 	scanner.Scan()
 	numEdges, err := strconv.Atoi(scanner.Text())
