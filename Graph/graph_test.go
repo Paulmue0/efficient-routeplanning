@@ -7,7 +7,7 @@ import (
 
 func TestSearch(t *testing.T) {
 	graph := NewGraph()
-	vertex := Vertex{0}
+	vertex := Vertex{Id: 0}
 	graph.AddVertex(vertex)
 
 	t.Run("known vertex", func(t *testing.T) {
@@ -20,7 +20,7 @@ func TestSearch(t *testing.T) {
 	})
 
 	t.Run("unknown vertex", func(t *testing.T) {
-		_, err := graph.Search(Vertex{1})
+		_, err := graph.Search(Vertex{Id: 1})
 		want := ErrVertexNotFound
 
 		assertError(t, err, want)
@@ -40,9 +40,9 @@ func TestAddVertex(t *testing.T) {
 	})
 	t.Run("adding existing vertex", func(t *testing.T) {
 		g := NewGraph()
-		g.AddVertex(Vertex{1})
+		g.AddVertex(Vertex{Id: 1})
 
-		err := g.AddVertex(Vertex{1})
+		err := g.AddVertex(Vertex{Id: 1})
 		want := ErrVertexAlreadyExists
 
 		assertError(t, err, want)
@@ -52,8 +52,8 @@ func TestAddVertex(t *testing.T) {
 func TestRemoveVertex(t *testing.T) {
 	t.Run("remove existing vertex", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 		g.RemoveVertex(vertex)
@@ -65,9 +65,9 @@ func TestRemoveVertex(t *testing.T) {
 	})
 	t.Run("not existing vertex", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
-		vertex3 := Vertex{3}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
+		vertex3 := Vertex{Id: 3}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 		err := g.RemoveVertex(vertex3)
@@ -78,9 +78,9 @@ func TestRemoveVertex(t *testing.T) {
 	})
 	t.Run("remove incoming edges", func(t *testing.T) {
 		g := NewGraph()
-		v1 := Vertex{1}
-		v2 := Vertex{2}
-		v3 := Vertex{3}
+		v1 := Vertex{Id: 1}
+		v2 := Vertex{Id: 2}
+		v3 := Vertex{Id: 3}
 
 		g.AddVertex(v1)
 		g.AddVertex(v2)
@@ -108,7 +108,7 @@ func TestRemoveVertex(t *testing.T) {
 	})
 	t.Run("idempotency", func(t *testing.T) {
 		g := NewGraph()
-		v := Vertex{1}
+		v := Vertex{Id: 1}
 		g.AddVertex(v)
 
 		_ = g.RemoveVertex(v)
@@ -121,8 +121,8 @@ func TestRemoveVertex(t *testing.T) {
 func TestAddEdge(t *testing.T) {
 	t.Run("adding a new edge", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 		edge := Edge{vertex2, 1}
@@ -135,8 +135,8 @@ func TestAddEdge(t *testing.T) {
 	})
 	t.Run("adding existing edge", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 		edge := Edge{vertex2, 1}
@@ -149,8 +149,8 @@ func TestAddEdge(t *testing.T) {
 	})
 	t.Run("vertex does not exist", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex2)
 		edge := Edge{vertex2, 1}
 
@@ -164,8 +164,8 @@ func TestAddEdge(t *testing.T) {
 func TestRemoveEdge(t *testing.T) {
 	t.Run("existing edge", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 		edge := Edge{vertex2, 1}
@@ -179,8 +179,8 @@ func TestRemoveEdge(t *testing.T) {
 	})
 	t.Run("not existing edge", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 		edge := Edge{vertex2, 1}
@@ -195,8 +195,8 @@ func TestRemoveEdge(t *testing.T) {
 func TestNeighbors(t *testing.T) {
 	t.Run("existing neighbor", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
-		vertex2 := Vertex{2}
+		vertex := Vertex{Id: 1}
+		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 		edge := Edge{vertex2, 1}
@@ -209,7 +209,7 @@ func TestNeighbors(t *testing.T) {
 	})
 	t.Run("no neighbor", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
+		vertex := Vertex{Id: 1}
 		g.AddVertex(vertex)
 
 		got, _ := g.Neighbors(vertex)
@@ -219,7 +219,7 @@ func TestNeighbors(t *testing.T) {
 	})
 	t.Run("vertex does not exist", func(t *testing.T) {
 		g := NewGraph()
-		vertex := Vertex{1}
+		vertex := Vertex{Id: 1}
 
 		_, err := g.Neighbors(vertex)
 		want := ErrVertexNotFound
@@ -230,8 +230,8 @@ func TestNeighbors(t *testing.T) {
 
 func TestAdjacent(t *testing.T) {
 	g := NewGraph()
-	v1 := Vertex{1}
-	v2 := Vertex{2}
+	v1 := Vertex{Id: 1}
+	v2 := Vertex{Id: 2}
 	g.AddVertex(v1)
 	g.AddVertex(v2)
 	g.AddEdge(v1, Edge{Target: v2, Weight: 1})
@@ -245,7 +245,7 @@ func TestAdjacent(t *testing.T) {
 	})
 
 	t.Run("not adjacent", func(t *testing.T) {
-		v3 := Vertex{3}
+		v3 := Vertex{Id: 3}
 		g.AddVertex(v3)
 		ok, err := g.Adjacent(v2, v3)
 		assertError(t, err, nil)
@@ -255,17 +255,17 @@ func TestAdjacent(t *testing.T) {
 	})
 
 	t.Run("unknown vertex", func(t *testing.T) {
-		_, err := g.Adjacent(Vertex{99}, v1)
+		_, err := g.Adjacent(Vertex{Id: 99}, v1)
 		assertError(t, err, ErrVertexNotFound)
 	})
 }
 
 func TestDegree(t *testing.T) {
 	g := NewGraph()
-	v1 := Vertex{1}
-	v2 := Vertex{2}
-	v3 := Vertex{3}
-	v4 := Vertex{4}
+	v1 := Vertex{Id: 1}
+	v2 := Vertex{Id: 2}
+	v3 := Vertex{Id: 3}
+	v4 := Vertex{Id: 4}
 	t.Run("non existing vertex", func(t *testing.T) {
 		_, err := g.Degree(v1)
 		assertError(t, err, ErrVertexNotFound)

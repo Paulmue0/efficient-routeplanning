@@ -26,6 +26,16 @@ var (
 	ErrVertexHasEdges      = errors.New("vertex has edges")
 )
 
+type RoadNetwork struct {
+	NumNodes int
+	NumEdges int
+	Network  *Graph
+}
+
+func NewRoadNetwork() *RoadNetwork {
+	return &RoadNetwork{}
+}
+
 type Graph struct {
 	AdjacencyList map[Vertex][]Edge
 }
@@ -144,7 +154,9 @@ func (g *Graph) Degree(vertex Vertex) (int, error) {
 }
 
 type Vertex struct {
-	Id VertexId
+	Id  VertexId
+	Lat float64
+	Lon float64
 }
 
 func (v Vertex) String() string {
