@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -32,14 +33,37 @@ type RoadNetwork struct {
 	Network  *Graph
 }
 
-// TODO: Proper print function for debugging and testing
 func NewRoadNetwork() *RoadNetwork {
 	return &RoadNetwork{}
 }
 
-// TODO: Proper print function for debugging and testing
+func (r RoadNetwork) String() string {
+	fmt.Println(r.Network)
+	return fmt.Sprintf("NumNodes: %d, NumEdges: %d, Network: %q", r.NumNodes, r.NumEdges, r.Network)
+}
+
 type Graph struct {
 	AdjacencyList map[Vertex][]Edge
+}
+
+func (g Graph) String() string {
+	converted := make(map[string][]Edge)
+	for v, edges := range g.AdjacencyList {
+		converted[v.String()] = edges
+	}
+
+	out := struct {
+		Network map[string][]Edge `json:"Network"`
+	}{
+		Network: converted,
+	}
+
+	bs, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("Error marshalling graph: %v", err)
+	}
+
+	return string(bs)
 }
 
 func NewGraph() *Graph {
