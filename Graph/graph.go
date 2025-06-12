@@ -1,22 +1,9 @@
 package graph
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 )
-
-/*
-*   - Adjacent(G, x, y): tests whether there is an edge from the vertex x to the vertex y;
-*   - Neighbors(G, x): lists all vertices y such that there is an edge from the vertex x to the vertex y;
-*   - Add_vertex(G, x): adds the vertex x, if it is not there;
-*   - Remove_vertex(G, x): removes the vertex x, if it is there;
-*   - Add_edge(G, x, y, z): adds the edge z from the vertex x to the vertex y, if it is not there;
-*   - Remove_edge(G, x, y): removes the edge from the vertex x to the vertex y, if it is there;
-*   - Get_vertex_value(G, x): returns the value associated with the vertex x;
-*   - Set_vertex_value(G, x, v): sets the value associated with the vertex x to v.
- */
 
 var (
 	ErrVertexNotFound      = errors.New("vertex not found")
@@ -27,157 +14,7 @@ var (
 	ErrVertexHasEdges      = errors.New("vertex has edges")
 )
 
-type RoadNetwork struct {
-	NumNodes int
-	NumEdges int
-	Network  *Graph
-}
-
-func NewRoadNetwork() *RoadNetwork {
-	return &RoadNetwork{}
-}
-
-func (r RoadNetwork) String() string {
-	fmt.Println(r.Network)
-	return fmt.Sprintf("NumNodes: %d, NumEdges: %d, Network: %q", r.NumNodes, r.NumEdges, r.Network)
-}
-
-type Graph struct {
-	AdjacencyList map[Vertex][]Edge
-}
-
-func (g Graph) String() string {
-	converted := make(map[string][]Edge)
-	for v, edges := range g.AdjacencyList {
-		converted[v.String()] = edges
-	}
-
-	out := struct {
-		Network map[string][]Edge `json:"Network"`
-	}{
-		Network: converted,
-	}
-
-	bs, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("Error marshalling graph: %v", err)
-	}
-
-	return string(bs)
-}
-
-func NewGraph() *Graph {
-	return &Graph{make(map[Vertex][]Edge)}
-}
-
-// *   - Adjacent(G, x, y): tests whether there is an edge from the vertex x to the vertex y;
-func (g *Graph) Adjacent(x, y Vertex) (bool, error) {
-	edges, err := g.Search(x)
-	if err != nil {
-		return false, err
-	}
-	for _, edge := range edges {
-		if edge.Target == y {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// *   - Neighbors(G, x): lists all vertices y such that there is an edge from the vertex x to the vertex y;
-// return error when vertex does not exist
-func (g *Graph) Neighbors(x Vertex) ([]Vertex, error) {
-	edges, err := g.Search(x)
-	if err != nil {
-		return nil, err
-	}
-	if len(edges) == 0 {
-		return nil, nil
-	}
-	vertices := make([]Vertex, 0)
-
-	for _, edge := range edges {
-		vertices = append(vertices, edge.Target)
-	}
-	return vertices, nil
-}
-
-func (g *Graph) Search(v Vertex) ([]Edge, error) {
-	edges, ok := g.AdjacencyList[v]
-	if !ok {
-		return edges, ErrVertexNotFound
-	}
-	return g.AdjacencyList[v], nil
-}
-
-func (g *Graph) ExistsEdge(v Vertex, e Edge) (bool, error) {
-	edges, err := g.Search(v)
-	if err == ErrVertexNotFound {
-		return false, ErrVertexNotFound
-	}
-	return slices.Contains(edges, e), nil
-}
-
-// *   - Add_vertex(G, x): adds the vertex x, if it is not there;
-func (g *Graph) AddVertex(x Vertex) error {
-	if _, exists := g.AdjacencyList[x]; exists {
-		return ErrVertexAlreadyExists
-	}
-	g.AdjacencyList[x] = []Edge{}
-	return nil
-}
-
-// *   - Remove_edge(G, x, y): removes the edge from the vertex x to the vertex y, if it is there;
-func (g *Graph) RemoveVertex(x Vertex) error {
-	if _, ok := g.AdjacencyList[x]; !ok {
-		return ErrVertexNotFound
-	}
-	for v, edges := range g.AdjacencyList {
-		newEdges := make([]Edge, 0)
-		for _, e := range edges {
-			if e.Target != x {
-				newEdges = append(newEdges, e)
-			}
-		}
-		g.AdjacencyList[v] = newEdges
-	}
-
-	delete(g.AdjacencyList, x)
-	return nil
-}
-
-func (g *Graph) AddEdge(source Vertex, edge Edge) error {
-	exists, err := g.ExistsEdge(source, edge)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return ErrEdgeAlreadyExists
-	}
-	g.AdjacencyList[source] = append(g.AdjacencyList[source], edge)
-	return nil
-}
-
-func (g *Graph) RemoveEdge(source Vertex, edge Edge) error {
-	exists, err := g.ExistsEdge(source, edge)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return ErrEdgeNotFound
-	}
-	index := slices.Index(g.AdjacencyList[source], edge)
-	g.AdjacencyList[source] = slices.Delete(g.AdjacencyList[source], index, index+1)
-	return nil
-}
-
-func (g *Graph) Degree(vertex Vertex) (int, error) {
-	edges, err := g.Search(vertex)
-	if err != nil {
-		return 0, err
-	}
-	return len(edges), nil
-}
+type VertexId int
 
 type Vertex struct {
 	Id  VertexId
@@ -189,13 +26,130 @@ func (v Vertex) String() string {
 	return fmt.Sprintf("ID: %d", v.Id)
 }
 
-type VertexId int
-
 type Edge struct {
-	Target Vertex
+	Target VertexId
 	Weight int
 }
 
 func (e Edge) String() string {
-	return fmt.Sprintf("Source: %q, Weight: %d", e.Target, e.Weight)
+	return fmt.Sprintf("Target: %d, Weight: %d", e.Target, e.Weight)
+}
+
+type Graph struct {
+	Vertices map[VertexId]Vertex
+	Edges    map[VertexId]map[VertexId]Edge // source -> target -> edge
+}
+
+func NewGraph() *Graph {
+	return &Graph{
+		Vertices: make(map[VertexId]Vertex),
+		Edges:    make(map[VertexId]map[VertexId]Edge),
+	}
+}
+
+func (g *Graph) AddVertex(x Vertex) error {
+	if _, exists := g.Vertices[x.Id]; exists {
+		return ErrVertexAlreadyExists
+	}
+	g.Vertices[x.Id] = x
+	return nil
+}
+
+func (g *Graph) RemoveVertex(id VertexId) error {
+	if _, exists := g.Vertices[id]; !exists {
+		return ErrVertexNotFound
+	}
+
+	// Check if vertex has any incoming or outgoing edges
+	for src, targets := range g.Edges {
+		if src == id || targets[id].Target == id {
+			return ErrVertexHasEdges
+		}
+	}
+
+	delete(g.Vertices, id)
+	delete(g.Edges, id)
+
+	for src := range g.Edges {
+		delete(g.Edges[src], id)
+	}
+
+	return nil
+}
+
+func (g *Graph) AddEdge(x, y VertexId, weight int) error {
+	if _, ok := g.Vertices[x]; !ok {
+		return ErrVertexNotFound
+	}
+	if _, ok := g.Vertices[y]; !ok {
+		return ErrVertexNotFound
+	}
+
+	if g.Edges[x] == nil {
+		g.Edges[x] = make(map[VertexId]Edge)
+	}
+	if _, exists := g.Edges[x][y]; exists {
+		return ErrEdgeAlreadyExists
+	}
+
+	g.Edges[x][y] = Edge{Target: y, Weight: weight}
+	return nil
+}
+
+func (g *Graph) RemoveEdge(x, y VertexId) error {
+	if _, exists := g.Edges[x]; !exists {
+		return ErrEdgeNotFound
+	}
+	if _, exists := g.Edges[x][y]; !exists {
+		return ErrEdgeNotFound
+	}
+
+	delete(g.Edges[x], y)
+	return nil
+}
+
+func (g *Graph) Adjacent(x, y VertexId) (bool, error) {
+	if _, ok := g.Vertices[x]; !ok {
+		return false, ErrVertexNotFound
+	}
+	if _, ok := g.Vertices[y]; !ok {
+		return false, ErrVertexNotFound
+	}
+
+	_, exists := g.Edges[x][y]
+	return exists, nil
+}
+
+func (g *Graph) Neighbors(x VertexId) ([]Vertex, error) {
+	if _, ok := g.Vertices[x]; !ok {
+		return nil, ErrVertexNotFound
+	}
+
+	targets := g.Edges[x]
+	if len(targets) == 0 {
+		return nil, nil
+	}
+
+	neighbors := make([]Vertex, 0, len(targets))
+	for targetId := range targets {
+		neighbors = append(neighbors, g.Vertices[targetId])
+	}
+
+	return neighbors, nil
+}
+
+func (g *Graph) Vertex(id VertexId) (Vertex, error) {
+	v, exists := g.Vertices[id]
+	if !exists {
+		return Vertex{}, ErrVertexNotFound
+	}
+	return v, nil
+}
+
+func (g *Graph) UpdateVertex(id VertexId, v Vertex) error {
+	if _, exists := g.Vertices[id]; !exists {
+		return ErrVertexNotFound
+	}
+	g.Vertices[id] = v
+	return nil
 }
