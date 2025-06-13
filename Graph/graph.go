@@ -14,7 +14,17 @@ var (
 	ErrVertexHasEdges      = errors.New("vertex has edges")
 )
 
+type RoadNetwork struct {
+	NumNodes int
+	NumEdges int
+	Network  *Graph
+}
+
 type VertexId int
+
+func (v VertexId) String() string {
+	return fmt.Sprintf("ID: %d", v)
+}
 
 type Vertex struct {
 	Id  VertexId
@@ -23,7 +33,7 @@ type Vertex struct {
 }
 
 func (v Vertex) String() string {
-	return fmt.Sprintf("ID: %d", v.Id)
+	return fmt.Sprintf("%d", v.Id)
 }
 
 type Edge struct {
@@ -45,6 +55,10 @@ func NewGraph() *Graph {
 		Vertices: make(map[VertexId]Vertex),
 		Edges:    make(map[VertexId]map[VertexId]Edge),
 	}
+}
+
+func (g *Graph) String() string {
+	return fmt.Sprintf("Nodes: %q\n\nEdges: %q", g.Vertices, g.Edges)
 }
 
 func (g *Graph) AddVertex(x Vertex) error {
