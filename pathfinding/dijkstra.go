@@ -1,6 +1,7 @@
 package pathfinding
 
 import (
+	"container/heap"
 	"errors"
 	"math"
 
@@ -13,14 +14,13 @@ var ErrTargetNotReachable = errors.New("target vertex not reachable from source"
 func DijkstraShortestPath(g graph.Graph, source, target graph.VertexId) ([]graph.VertexId, error) {
 	weights := initializeWeights(g, source)
 	bestPredecessors := make(map[graph.VertexId]graph.VertexId)
-	queue := initializePriorityQueue(g, weights)
+	queue := initializePriorityQueue(weights)
 
 	for queue.Len() > 0 {
-		item := queue.Pop().(*collection.Item[graph.VertexId])
-		vertex := item.Value
+		item := heap.Pop(queue).(*collection.Item[graph.VertexId])
+		vertex := queue.GetValue(item)
 
 		if math.IsInf(weights[vertex], 1) {
-			// Remaining vertices are unreachable from source
 			break
 		}
 		if vertex == target {
@@ -36,7 +36,6 @@ func DijkstraShortestPath(g graph.Graph, source, target graph.VertexId) ([]graph
 			}
 		}
 	}
-
 	return nil, ErrTargetNotReachable
 }
 
@@ -52,7 +51,7 @@ func initializeWeights(g graph.Graph, source graph.VertexId) map[graph.VertexId]
 	return weights
 }
 
-func initializePriorityQueue(g graph.Graph, weights map[graph.VertexId]float64) *collection.PriorityQueue[graph.VertexId] {
+func initializePriorityQueue(weights map[graph.VertexId]float64) *collection.PriorityQueue[graph.VertexId] {
 	queue := collection.NewPriorityQueue[graph.VertexId]()
 	for vertex, weight := range weights {
 		queue.PushWithPriority(vertex, weight)
