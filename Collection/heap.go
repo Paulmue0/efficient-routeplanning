@@ -7,9 +7,8 @@ import (
 // This impl. is adapted by me with generics from the go standard library code for heaps.
 // https://pkg.go.dev/container/heap#example-package-IntHeap
 
-// An Item is something we manage in a priority queue.
 type Item[T comparable] struct {
-	Value    T
+	value    T
 	priority float64
 	index    int
 }
@@ -31,12 +30,29 @@ func NewPriorityQueue[T comparable]() *PriorityQueue[T] {
 	}
 }
 
+type Entry[T comparable] struct {
+	Value    T
+	Priority float64
+}
+
+func (pq *PriorityQueue[T]) Items() []Entry[T] {
+	result := make([]Entry[T], len(pq.items))
+	for i, item := range pq.items {
+		result[i] = Entry[T]{Value: item.value, Priority: item.priority}
+	}
+	return result
+}
+
+func (pq *PriorityQueue[T]) GetValue(item *Item[T]) T {
+	return item.value
+}
+
 func (pq *PriorityQueue[T]) Len() int {
 	return len(pq.items)
 }
 
 func (pq *PriorityQueue[T]) Less(i, j int) bool {
-	return pq.items[i].priority > pq.items[j].priority
+	return pq.items[i].priority < pq.items[j].priority
 }
 
 func (pq *PriorityQueue[T]) Swap(i, j int) {
@@ -49,11 +65,11 @@ func (pq *PriorityQueue[T]) Push(x any) {
 	item := x.(*Item[T])
 	item.index = len(pq.items)
 	pq.items = append(pq.items, item)
-	pq.index[item.Value] = item
+	pq.index[item.value] = item
 }
 
 func (pq *PriorityQueue[T]) PushWithPriority(value T, priority float64) {
-	item := &Item[T]{Value: value, priority: priority}
+	item := &Item[T]{value: value, priority: priority}
 	heap.Push(pq, item)
 }
 
@@ -63,12 +79,11 @@ func (pq *PriorityQueue[T]) Pop() any {
 	pq.items[n-1] = nil
 	pq.items = pq.items[:n-1]
 	item.index = -1
-	delete(pq.index, item.Value)
+	delete(pq.index, item.value)
 	return item
 }
 
-func (pq *PriorityQueue[T]) Update(item *Item[T], value T, priority float64) {
-	item.Value = value
+func (pq *PriorityQueue[T]) Update(item *Item[T], priority float64) {
 	item.priority = priority
 	heap.Fix(pq, item.index)
 }
@@ -77,5 +92,7 @@ func (pq *PriorityQueue[T]) UpdatePriority(value T, priority float64) {
 	if item, ok := pq.index[value]; ok {
 		item.priority = priority
 		heap.Fix(pq, item.index)
+	} else {
+		pq.PushWithPriority(value, priority)
 	}
 }
