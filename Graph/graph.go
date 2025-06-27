@@ -152,6 +152,13 @@ func (g *Graph) Neighbors(x VertexId) ([]Vertex, error) {
 	return neighbors, nil
 }
 
+func (g *Graph) Degree(x VertexId) (int, error) {
+	if _, ok := g.Vertices[x]; !ok {
+		return 0, ErrVertexNotFound
+	}
+	return len(g.Edges[x]), nil
+}
+
 func (g *Graph) Vertex(id VertexId) (Vertex, error) {
 	v, exists := g.Vertices[id]
 	if !exists {

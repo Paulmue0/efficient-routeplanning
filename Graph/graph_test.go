@@ -236,36 +236,36 @@ func TestAdjacent(t *testing.T) {
 	})
 }
 
-//
-// func TestDegree(t *testing.T) {
-// 	g := NewGraph()
-// 	v1 := Vertex{Id: 1}
-// 	v2 := Vertex{Id: 2}
-// 	v3 := Vertex{Id: 3}
-// 	v4 := Vertex{Id: 4}
-// 	t.Run("non existing vertex", func(t *testing.T) {
-// 		_, err := g.Degree(v1)
-// 		assertError(t, err, ErrVertexNotFound)
-// 	})
-// 	t.Run("no neighbors", func(t *testing.T) {
-// 		g.AddVertex(v1)
-// 		g.AddVertex(v2)
-// 		g.AddVertex(v3)
-// 		g.AddVertex(v4)
-//
-// 		got, err := g.Degree(v1)
-// 		assertError(t, err, nil)
-// 		assertInt(t, got, 0)
-// 	})
-// 	t.Run("3 Neighbors", func(t *testing.T) {
-// 		g.AddEdge(v1, Edge{Target: v2, Weight: 1})
-// 		g.AddEdge(v1, Edge{Target: v3, Weight: 1})
-// 		g.AddEdge(v1, Edge{Target: v4, Weight: 1})
-// 		got, err := g.Degree(v1)
-// 		assertError(t, err, nil)
-// 		assertInt(t, got, 3)
-// 	})
-// }
+
+func TestDegree(t *testing.T) {
+	g := NewGraph()
+	v1 := Vertex{Id: 1}
+	v2 := Vertex{Id: 2}
+	v3 := Vertex{Id: 3}
+	v4 := Vertex{Id: 4}
+	t.Run("non existing vertex", func(t *testing.T) {
+		_, err := g.Degree(v1.Id)
+		assertError(t, err, ErrVertexNotFound)
+	})
+	t.Run("no neighbors", func(t *testing.T) {
+		g.AddVertex(v1)
+		g.AddVertex(v2)
+		g.AddVertex(v3)
+		g.AddVertex(v4)
+
+		got, err := g.Degree(v1.Id)
+		assertError(t, err, nil)
+		assertInt(t, got, 0)
+	})
+	t.Run("3 Neighbors", func(t *testing.T) {
+		g.AddEdge(v1.Id,v2.Id, 1)
+		g.AddEdge(v1.Id,v3.Id, 1)
+		g.AddEdge(v1.Id,v4.Id, 1)
+		got, err := g.Degree(v1.Id)
+		assertError(t, err, nil)
+		assertInt(t, got, 3)
+	})
+}
 
 func assertError(t testing.TB, got error, want error) {
 	t.Helper()
