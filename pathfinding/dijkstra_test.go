@@ -125,7 +125,7 @@ func TestDijkstraShortestPath(t *testing.T) {
 				graphToUse = g
 			}
 
-			gotPath, err := DijkstraShortestPath(*graphToUse, tt.source, tt.target)
+			gotPath, err := DijkstraShortestPath(graphToUse, tt.source, tt.target)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("DijkstraShortestPath() error = %v, wantErr %v", err, tt.wantErr)
 			}
