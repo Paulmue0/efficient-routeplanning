@@ -11,7 +11,7 @@ import (
 
 var ErrTargetNotReachable = errors.New("target vertex not reachable from source")
 
-func DijkstraShortestPath(g graph.Graph, source, target graph.VertexId) ([]graph.VertexId, error) {
+func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId) ([]graph.VertexId, error) {
 	weights := initializeWeights(g, source)
 	bestPredecessors := make(map[graph.VertexId]graph.VertexId)
 	queue := initializePriorityQueue(weights)
@@ -39,7 +39,7 @@ func DijkstraShortestPath(g graph.Graph, source, target graph.VertexId) ([]graph
 	return nil, ErrTargetNotReachable
 }
 
-func initializeWeights(g graph.Graph, source graph.VertexId) map[graph.VertexId]float64 {
+func initializeWeights(g *graph.Graph, source graph.VertexId) map[graph.VertexId]float64 {
 	weights := make(map[graph.VertexId]float64)
 	for vertex := range g.Edges {
 		if vertex == source {
