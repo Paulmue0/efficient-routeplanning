@@ -21,20 +21,20 @@ func createTestGraph() *graph.Graph {
 	g.AddVertex(v3)
 
 	// Add edges (bidirectional)
-	g.AddEdge(v0.Id, v1.Id, 2)
-	g.AddEdge(v1.Id, v0.Id, 2)
+	g.AddEdge(v0.Id, v1.Id, 2, false, -1)
+	g.AddEdge(v1.Id, v0.Id, 2, false, -1)
 
-	g.AddEdge(v1.Id, v2.Id, 4)
-	g.AddEdge(v2.Id, v1.Id, 4)
+	g.AddEdge(v1.Id, v2.Id, 4, false, -1)
+	g.AddEdge(v2.Id, v1.Id, 4, false, -1)
 
-	g.AddEdge(v0.Id, v2.Id, 1)
-	g.AddEdge(v2.Id, v0.Id, 1)
+	g.AddEdge(v0.Id, v2.Id, 1, false, -1)
+	g.AddEdge(v2.Id, v0.Id, 1, false, -1)
 
-	g.AddEdge(v2.Id, v3.Id, 7)
-	g.AddEdge(v3.Id, v2.Id, 7)
+	g.AddEdge(v2.Id, v3.Id, 7, false, -1)
+	g.AddEdge(v3.Id, v2.Id, 7, false, -1)
 
-	g.AddEdge(v1.Id, v3.Id, 3)
-	g.AddEdge(v3.Id, v1.Id, 3)
+	g.AddEdge(v1.Id, v3.Id, 3, false, -1)
+	g.AddEdge(v3.Id, v1.Id, 3, false, -1)
 
 	return g
 }
@@ -125,7 +125,7 @@ func TestDijkstraShortestPath(t *testing.T) {
 				graphToUse = g
 			}
 
-			gotPath, err := DijkstraShortestPath(graphToUse, tt.source, tt.target)
+			gotPath, _, err := DijkstraShortestPath(graphToUse, tt.source, tt.target)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("DijkstraShortestPath() error = %v, wantErr %v", err, tt.wantErr)
 			}

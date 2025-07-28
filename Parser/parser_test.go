@@ -37,14 +37,14 @@ func TestNewRoadNetwork(t *testing.T) {
 	mockGraph.AddVertex(Vertex2)
 	mockGraph.AddVertex(Vertex3)
 
-	mockGraph.AddEdge(Vertex0.Id, Vertex1.Id, 1)
-	mockGraph.AddEdge(Vertex0.Id, Vertex2.Id, 1)
-	mockGraph.AddEdge(Vertex0.Id, Vertex3.Id, 1)
+	mockGraph.AddEdge(Vertex0.Id, Vertex1.Id, 1, false, -1)
+	mockGraph.AddEdge(Vertex0.Id, Vertex2.Id, 1, false, -1)
+	mockGraph.AddEdge(Vertex0.Id, Vertex3.Id, 1, false, -1)
 
 	// also reverse edges as it is undirected:
-	mockGraph.AddEdge(Vertex1.Id, Vertex0.Id, 1)
-	mockGraph.AddEdge(Vertex2.Id, Vertex0.Id, 1)
-	mockGraph.AddEdge(Vertex3.Id, Vertex0.Id, 1)
+	mockGraph.AddEdge(Vertex1.Id, Vertex0.Id, 1, false, -1)
+	mockGraph.AddEdge(Vertex2.Id, Vertex0.Id, 1, false, -1)
+	mockGraph.AddEdge(Vertex3.Id, Vertex0.Id, 1, false, -1)
 	fs := fstest.MapFS{
 		"network-1.txt": {Data: []byte(exampleNetwork)},
 	}

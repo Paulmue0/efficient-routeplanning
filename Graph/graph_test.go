@@ -8,17 +8,17 @@ import (
 // func TestSearch(t *testing.T) {
 // 	graph := NewGraph()
 // 	vertex := Vertex{Id: 0}
-// 	graph.AddVertex(vertex)
+// 	AddVertex(vertex)
 //
 // 	t.Run("known vertex", func(t *testing.T) {
-// 		got, _ := graph.Vertex(vertex.Id)
+// 		got, _ := Vertex(vertex.Id)
 // 		want := vertex
 //
 // 		assertSlice
 // 	})
 //
 // 	t.Run("unknown vertex", func(t *testing.T) {
-// 		_, err := graph.Search(1)
+// 		_, err := Search(1)
 // 		want := ErrVertexNotFound
 //
 // 		assertError(t, err, want)
@@ -82,7 +82,7 @@ func TestRemoveVertex(t *testing.T) {
 		g.AddVertex(v1)
 		g.AddVertex(v2)
 
-		g.AddEdge(v2.Id, v1.Id, 5)
+		g.AddEdge(v2.Id, v1.Id, 5, false, -1)
 
 		err := g.RemoveVertex(v1.Id)
 		assertError(t, err, ErrVertexHasEdges)
@@ -108,7 +108,7 @@ func TestAddEdge(t *testing.T) {
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 
-		g.AddEdge(vertex.Id, vertex2.Id, 1)
+		g.AddEdge(vertex.Id, vertex2.Id, 1, false, -1)
 		got := len(g.Edges[vertex.Id])
 		want := 1
 
@@ -121,8 +121,8 @@ func TestAddEdge(t *testing.T) {
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 
-		g.AddEdge(vertex.Id, vertex2.Id, 1)
-		err := g.AddEdge(vertex.Id, vertex2.Id, 1)
+		g.AddEdge(vertex.Id, vertex2.Id, 1, false, -1)
+		err := g.AddEdge(vertex.Id, vertex2.Id, 1, false, -1)
 		want := ErrEdgeAlreadyExists
 
 		assertError(t, err, want)
@@ -133,7 +133,7 @@ func TestAddEdge(t *testing.T) {
 		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex2)
 
-		err := g.AddEdge(vertex.Id, vertex2.Id, 1)
+		err := g.AddEdge(vertex.Id, vertex2.Id, 1, false, -1)
 		want := ErrVertexNotFound
 
 		assertError(t, err, want)
@@ -148,7 +148,7 @@ func TestRemoveEdge(t *testing.T) {
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
 
-		g.AddEdge(vertex.Id, vertex2.Id, 1)
+		g.AddEdge(vertex.Id, vertex2.Id, 1, false, -1)
 		g.RemoveEdge(vertex.Id, vertex2.Id)
 		got := len(g.Edges[vertex.Id])
 		want := 0
@@ -176,7 +176,7 @@ func TestNeighbors(t *testing.T) {
 		vertex2 := Vertex{Id: 2}
 		g.AddVertex(vertex)
 		g.AddVertex(vertex2)
-		g.AddEdge(vertex.Id, vertex2.Id, 1)
+		g.AddEdge(vertex.Id, vertex2.Id, 1, false, -1)
 
 		got, _ := g.Neighbors(vertex.Id)
 		want := []Vertex{vertex2}
@@ -210,7 +210,7 @@ func TestAdjacent(t *testing.T) {
 	v2 := Vertex{Id: 2}
 	g.AddVertex(v1)
 	g.AddVertex(v2)
-	g.AddEdge(v1.Id, v2.Id, 1)
+	g.AddEdge(v1.Id, v2.Id, 1, false, -1)
 
 	t.Run("is adjacent", func(t *testing.T) {
 		ok, err := g.Adjacent(v1.Id, v2.Id)
@@ -236,6 +236,59 @@ func TestAdjacent(t *testing.T) {
 	})
 }
 
+func createGraphFromSlidedeck() *Graph {
+	g := NewGraph()
+
+	for i := 0; i <= 8; i++ {
+		g.AddVertex(Vertex{Id: VertexId(i)})
+	}
+
+	edges := []struct {
+		from, to VertexId
+		weight   int
+	}{
+		{0, 1, 2},
+		{0, 2, 1},
+		{1, 2, 4},
+		{1, 3, 10},
+		{1, 4, 3},
+		{1, 5, 5},
+		{4, 6, 6},
+		{4, 7, 9},
+		{5, 6, 2},
+	}
+
+	for _, e := range edges {
+		g.AddEdge(e.from, e.to, e.weight, false, -1)
+		g.AddEdge(e.to, e.from, e.weight, false, -1)
+	}
+
+	return g
+}
+
+func TestDegreeTable(t *testing.T) {
+	g := createGraphFromSlidedeck()
+
+	degreeTests := map[VertexId]int{
+		0: 2,
+		1: 5,
+		2: 2,
+		3: 1,
+		4: 3,
+		5: 2,
+		6: 2,
+		7: 1,
+	}
+
+	for id, want := range degreeTests {
+		t.Run(string(rune(id)), func(t *testing.T) {
+			got, _ := g.Degree(id)
+			if got != want {
+				t.Errorf("got %v, want %v", got, want)
+			}
+		})
+	}
+}
 
 func TestDegree(t *testing.T) {
 	g := NewGraph()
@@ -258,9 +311,9 @@ func TestDegree(t *testing.T) {
 		assertInt(t, got, 0)
 	})
 	t.Run("3 Neighbors", func(t *testing.T) {
-		g.AddEdge(v1.Id,v2.Id, 1)
-		g.AddEdge(v1.Id,v3.Id, 1)
-		g.AddEdge(v1.Id,v4.Id, 1)
+		g.AddEdge(v1.Id, v2.Id, 1, false, -1)
+		g.AddEdge(v1.Id, v3.Id, 1, false, -1)
+		g.AddEdge(v1.Id, v4.Id, 1, false, -1)
 		got, err := g.Degree(v1.Id)
 		assertError(t, err, nil)
 		assertInt(t, got, 3)

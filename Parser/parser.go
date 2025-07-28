@@ -52,9 +52,9 @@ func newNetwork(networkFile io.Reader) (graph.RoadNetwork, error) {
 			source, _ := g.Vertex(graph.VertexId(sourceId))
 			target, _ := g.Vertex(graph.VertexId(targetId))
 
-			g.AddEdge(source.Id, target.Id, 1)
+			g.AddEdge(source.Id, target.Id, 1, false, -1)
 			// as it is undirected also the reverse
-			g.AddEdge(target.Id, source.Id, 1)
+			g.AddEdge(target.Id, source.Id, 1, false, -1)
 		}
 	}
 

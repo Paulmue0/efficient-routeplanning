@@ -37,8 +37,10 @@ func (v Vertex) String() string {
 }
 
 type Edge struct {
-	Target VertexId
-	Weight int
+	Target     VertexId
+	Weight     int
+	IsShortcut bool
+	Via        VertexId
 }
 
 func (e Edge) String() string {
@@ -91,7 +93,7 @@ func (g *Graph) RemoveVertex(id VertexId) error {
 	return nil
 }
 
-func (g *Graph) AddEdge(x, y VertexId, weight int) error {
+func (g *Graph) AddEdge(x, y VertexId, weight int, shortcut bool, via VertexId) error {
 	if _, ok := g.Vertices[x]; !ok {
 		return ErrVertexNotFound
 	}
@@ -106,7 +108,7 @@ func (g *Graph) AddEdge(x, y VertexId, weight int) error {
 		return ErrEdgeAlreadyExists
 	}
 
-	g.Edges[x][y] = Edge{Target: y, Weight: weight}
+	g.Edges[x][y] = Edge{Target: y, Weight: weight, IsShortcut: shortcut, Via: via}
 	return nil
 }
 
@@ -157,6 +159,39 @@ func (g *Graph) Degree(x VertexId) (int, error) {
 		return 0, ErrVertexNotFound
 	}
 	return len(g.Edges[x]), nil
+}
+
+func (g *Graph) Subgraph(v VertexId) (*Graph, error) {
+	if _, exists := g.Vertices[v]; !exists {
+		return nil, ErrVertexNotFound
+	}
+	sub := NewGraph()
+	sub.AddVertex(g.Vertices[v])
+	neighbors, _ := g.Neighbors(v)
+
+	for _, neighbor := range neighbors {
+		sub.AddVertex(neighbor)
+
+		if edge, ok := g.Edges[v][neighbor.Id]; ok {
+			sub.AddEdge(v, neighbor.Id, edge.Weight, edge.IsShortcut, edge.Via)
+		}
+		if edge, ok := g.Edges[neighbor.Id][v]; ok {
+			sub.AddEdge(neighbor.Id, v, edge.Weight, edge.IsShortcut, edge.Via)
+		}
+	}
+
+	for _, from := range neighbors {
+		for _, to := range neighbors {
+			if from.Id == to.Id {
+				continue
+			}
+			if edge, ok := g.Edges[from.Id][to.Id]; ok {
+				sub.AddEdge(from.Id, to.Id, edge.Weight, edge.IsShortcut, edge.Via)
+			}
+		}
+	}
+
+	return sub, nil
 }
 
 func (g *Graph) Vertex(id VertexId) (Vertex, error) {
