@@ -1,6 +1,7 @@
 package pathfinding
 
 import (
+	"container/heap"
 	"fmt"
 	"slices"
 
@@ -9,65 +10,149 @@ import (
 )
 
 type ContractionHierarchies struct {
-	ContractionOrder []graph.VertexId
-	EdgeDifferences  *collection.PriorityQueue[graph.VertexId]
+	NumShortcutsAdded int
+	ContractionOrder  []graph.VertexId
+	Priorities        *collection.PriorityQueue[graph.VertexId]
+	UpwardsGraph      *graph.Graph
+	DownwardsGraph    *graph.Graph
 }
+
+var SCAdded = 0
 
 func NewContractionHierarchies() *ContractionHierarchies {
 	co := make([]graph.VertexId, 0)
 	ed := collection.NewPriorityQueue[graph.VertexId]()
+	ug := graph.NewGraph()
+	dg := graph.NewGraph()
 
-	return &ContractionHierarchies{co, ed}
+	return &ContractionHierarchies{0, co, ed, ug, dg}
 }
 
-// Preprocessing Steps:
-// get shortcuts...
-//
-// 1. needs (graph, node)
-// should find all shortcuts that would occur when note is contracted
-//
-// 2. get neighbors of node
-// 3. check shortest path between all neighbors
-// 	- if the shortest path contains the original node -> shortcuts added +1
-// return num of shortcuts and also the node tuples of the two shortcuts
-//
-//
+func (c *ContractionHierarchies) Preprocess(g *graph.Graph) {
+	c.InitializePriority(g)
+	// WHILE G HAS NODES:
+	for len(g.Vertices) >= 1 {
+		item := heap.Pop(c.Priorities).(*collection.Item[graph.VertexId])
+		v := c.Priorities.GetValue(item)
+
+		neighbors, _ := g.Neighbors(v)
+		c.Contract(g, v)
+
+		// Update ONLY the priorities of the neighbors
+		for _, neighbor := range neighbors {
+			if _, ok := g.Vertices[neighbor.Id]; ok { // Check if neighbor hasn't been contracted yet
+				newNeighborPrio := Priority(g, neighbor.Id)
+				c.Priorities.UpdatePriority(neighbor.Id, newNeighborPrio)
+			}
+		}
+	}
+}
+
+func (c *ContractionHierarchies) InitializePriority(g *graph.Graph) {
+	for _, v := range g.Vertices {
+		c.Priorities.PushWithPriority(v.Id, Priority(g, v.Id))
+	}
+}
+
+func (c *ContractionHierarchies) UpdatePriorities(g *graph.Graph) {
+	// TODO: for all nodes in parallel run update edge differences
+	for _, v := range g.Vertices {
+		c.Priorities.UpdatePriority(v.Id, Priority(g, v.Id))
+	}
+}
+
+func (c *ContractionHierarchies) Contract(g *graph.Graph, v graph.VertexId) {
+	Shortcuts(g, v, true)
+	// TODO: Needs wait group when run in parallel!
+	c.ContractionOrder = append(c.ContractionOrder, v)
+	c.InsertInUpwardsOrDownwardsGraph(g, v)
+
+	if err := g.RemoveVertex(v); err != nil {
+		panic(fmt.Sprintf("critical error removing vertex %v: %v.\n Edges: %v,\n Vertices %v", v, err, g.Edges[v], g.Vertices))
+	}
+}
+
+func (c *ContractionHierarchies) InsertInUpwardsOrDownwardsGraph(g *graph.Graph, v graph.VertexId) {
+	// 		-> get all edges for this node
+	edges := g.Edges[v]
+
+	c.DownwardsGraph.AddVertex(g.Vertices[v])
+	c.UpwardsGraph.AddVertex(g.Vertices[v])
+
+	// 		-> for each edge:
+	for _, edge := range edges {
+		c.DownwardsGraph.AddVertex(g.Vertices[edge.Target])
+		c.UpwardsGraph.AddVertex(g.Vertices[edge.Target])
+		//-> if target is in the Contraction Order put the edge into the downwards graph.
+		if slices.Contains(c.ContractionOrder, edge.Target) {
+			c.UpwardsGraph.AddEdge(edge.Target, v, edge.Weight, edge.IsShortcut, edge.Via)
+			c.DownwardsGraph.AddEdge(v, edge.Target, edge.Weight, edge.IsShortcut, edge.Via)
+		} else {
+			// 			-> else put it in the upwards graph
+			c.DownwardsGraph.AddEdge(edge.Target, v, edge.Weight, edge.IsShortcut, edge.Via)
+			c.UpwardsGraph.AddEdge(v, edge.Target, edge.Weight, edge.IsShortcut, edge.Via)
+		}
+		g.RemoveEdge(v, edge.Target)
+		g.RemoveEdge(edge.Target, v)
+	}
+}
 
 func Shortcuts(g *graph.Graph, v graph.VertexId, insertFlag bool) int {
 	shortcutsFound := 0
 	neighbors, _ := g.Neighbors(v)
+	incidentEdges := g.Edges[v]
 
 	for i := 0; i < len(neighbors)-1; i++ {
+		u := neighbors[i]
 		for j := i + 1; j < len(neighbors); j++ {
-			path, cost, _ := DijkstraShortestPath(g, neighbors[i].Id, neighbors[j].Id)
-			if slices.Contains(path, v) && len(path) == 3 {
-				if insertFlag {
-					g.AddEdge(neighbors[i].Id, neighbors[j].Id, int(cost), true, v)
-				}
+			w := neighbors[j]
+
+			costViaV := float64(incidentEdges[u.Id].Weight) + float64(incidentEdges[w.Id].Weight)
+
+			// Check if the path u->v->w is a shortest path. Bound the search by `costViaV`.
+			_, shortestPathCost, _ := DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */)
+			if shortestPathCost < costViaV {
+				continue // Path u->v->w is not a shortest path, so we ignore it.
+			}
+
+			// Check for an alternative path of the same length, ignoring v.
+			// This search is also bounded by `costViaV`.
+			_, _, err := DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */, v /* ignored */)
+			// A shortcut is needed only if the witness search fails to find a path within the bound.
+			if err != nil {
 				shortcutsFound++
+				if insertFlag {
+					SCAdded++
+					cost := int(costViaV)
+					addErr := g.AddEdge(u.Id, w.Id, cost, true, v)
+					if addErr == graph.ErrEdgeAlreadyExists {
+						g.UpdateEdge(u.Id, w.Id, cost, true, v)
+						g.UpdateEdge(w.Id, u.Id, cost, true, v)
+					} else {
+						g.AddEdge(w.Id, u.Id, cost, true, v)
+					}
+				}
 			}
 		}
 	}
 	return shortcutsFound
 }
 
-// ED(v) is the number of shortcuts that would need to be added if contracting v
-// minus the number of edges that would get contracted (degree of v).
+// Ed is the number of shortcuts that would need to be added if contracting v minus the number of edges that would get contracted (degree of v).
+// The priority combines the classic edge difference (shortcuts - degree) with a term that normalizes the number of
+// shortcuts by the vertex's degree.
+func Priority(g *graph.Graph, v graph.VertexId) float64 {
+	degree, _ := g.Degree(v)
+	shortcuts := Shortcuts(g, v, false)
+	ed := EdgeDifference(g, v)
+
+	priority := float64(ed) + (float64(shortcuts) / (float64(degree) + 1.0))
+
+	return priority
+}
+
 func EdgeDifference(g *graph.Graph, v graph.VertexId) int {
 	degree, _ := g.Degree(v)
 	shortcuts := Shortcuts(g, v, false)
-
-	fmt.Println(degree, shortcuts, shortcuts-degree)
 	return shortcuts - degree
-}
-
-func Contract(g *graph.Graph, v graph.VertexId, contractionOrder []graph.VertexId) {
-	// update priority
-	//:would
-	// get highest prio note
-	//
-	// contract this node
-	// 	->
-	// 	-> insert shortcuts for this node
-	//
 }
