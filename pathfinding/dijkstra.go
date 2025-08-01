@@ -11,14 +11,31 @@ import (
 
 var ErrTargetNotReachable = errors.New("target vertex not reachable from source")
 
-func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId) ([]graph.VertexId, float64, error) {
+func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId, bound float64, ignoredNode ...graph.VertexId) ([]graph.VertexId, float64, error) {
 	weights := initializeWeights(g, source)
 	bestPredecessors := make(map[graph.VertexId]graph.VertexId)
 	queue := initializePriorityQueue(weights)
 
+	var nodeToIgnore graph.VertexId
+	ignoreIsSet := len(ignoredNode) > 0
+	if ignoreIsSet {
+		nodeToIgnore = ignoredNode[0]
+	}
+
 	for queue.Len() > 0 {
 		item := heap.Pop(queue).(*collection.Item[graph.VertexId])
 		vertex := queue.GetValue(item)
+		cost := queue.GetPriority(item)
+
+		// If the shortest distance to the current node already exceeds the bound,
+		// we know we can't find a path to the target within the limit.
+		if cost > bound {
+			break
+		}
+
+		if ignoreIsSet && vertex == nodeToIgnore {
+			continue
+		}
 
 		if math.IsInf(weights[vertex], 1) {
 			break
@@ -30,7 +47,6 @@ func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId) ([]grap
 			}
 			return path, weights[target], nil
 		}
-
 		for adjacent, edge := range g.Edges[vertex] {
 			newWeight := weights[vertex] + float64(edge.Weight)
 			if newWeight < weights[adjacent] {

@@ -1,6 +1,7 @@
 package pathfinding
 
 import (
+	"math"
 	"testing"
 
 	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
@@ -124,8 +125,7 @@ func TestDijkstraShortestPath(t *testing.T) {
 			} else {
 				graphToUse = g
 			}
-
-			gotPath, _, err := DijkstraShortestPath(graphToUse, tt.source, tt.target)
+			gotPath, _, err := DijkstraShortestPath(graphToUse, tt.source, tt.target, math.Inf(1))
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("DijkstraShortestPath() error = %v, wantErr %v", err, tt.wantErr)
 			}
