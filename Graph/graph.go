@@ -44,6 +44,9 @@ type Edge struct {
 }
 
 func (e Edge) String() string {
+	if e.IsShortcut {
+		return fmt.Sprintf("Target: %d, Weight: %d, IsShortcutVia %d", e.Target, e.Weight, e.Via)
+	}
 	return fmt.Sprintf("Target: %d, Weight: %d", e.Target, e.Weight)
 }
 
@@ -78,8 +81,16 @@ func (g *Graph) RemoveVertex(id VertexId) error {
 
 	// Check if vertex has any incoming or outgoing edges
 	for src, targets := range g.Edges {
-		if src == id || targets[id].Target == id {
+		// Outgoing edge from id
+		if src == id {
 			return ErrVertexHasEdges
+		}
+
+		// Incoming edge to id
+		if edge, ok := targets[id]; ok {
+			if edge.Target == id {
+				return ErrVertexHasEdges
+			}
 		}
 	}
 
@@ -112,6 +123,23 @@ func (g *Graph) AddEdge(x, y VertexId, weight int, shortcut bool, via VertexId) 
 	return nil
 }
 
+func (g *Graph) UpdateEdge(x, y VertexId, weight int, shortcut bool, via VertexId) error {
+	if g.Edges == nil || g.Edges[x] == nil {
+		return ErrEdgeNotFound
+	}
+
+	existingEdge, exists := g.Edges[x][y]
+	if !exists {
+		return ErrEdgeNotFound // Cannot update an edge that does not exist.
+	}
+
+	if weight < existingEdge.Weight {
+		g.Edges[x][y] = Edge{Target: y, Weight: weight, IsShortcut: shortcut, Via: via}
+	}
+
+	return nil
+}
+
 func (g *Graph) RemoveEdge(x, y VertexId) error {
 	if _, exists := g.Edges[x]; !exists {
 		return ErrEdgeNotFound
@@ -121,6 +149,10 @@ func (g *Graph) RemoveEdge(x, y VertexId) error {
 	}
 
 	delete(g.Edges[x], y)
+
+	if len(g.Edges[x]) == 0 {
+		delete(g.Edges, x)
+	}
 	return nil
 }
 
