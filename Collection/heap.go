@@ -118,6 +118,15 @@ func (pq *PriorityQueue[T]) Pop() any {
 	return item
 }
 
+// Peek returns the item with the lowest priority without removing it from the queue.
+// It returns nil if the queue is empty.
+func (pq *PriorityQueue[T]) Peek() *Item[T] {
+	if pq.Len() == 0 {
+		return nil
+	}
+	return pq.items[0]
+}
+
 // Update modifies the priority of an item in the queue. After changing the
 // priority, it re-establishes the heap property.
 func (pq *PriorityQueue[T]) Update(item *Item[T], priority float64) {
