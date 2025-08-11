@@ -9,7 +9,9 @@ import (
 	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
 )
 
-// searchContext holds all the state for a single direction of a bidirectional search.
+// searchContext holds the state for a single direction of a Dijkstra search.
+// It includes the graph being traversed, a priority queue for nodes to visit,
+// maps for distances from the source, and predecessors to reconstruct the path.
 type searchContext struct {
 	g     *graph.Graph
 	pq    *collection.PriorityQueue[graph.VertexId]
@@ -17,6 +19,9 @@ type searchContext struct {
 	preds map[graph.VertexId]graph.VertexId
 }
 
+// newSearchContext initializes and returns a new search context for a given graph and start node.
+// It sets up the distance map with infinity for all nodes except the start node (which is set to 0)
+// and prepares the priority queue.
 func newSearchContext(g *graph.Graph, startNode graph.VertexId) *searchContext {
 	dists := initializeWeights(g, startNode)
 	pq := initializePriorityQueue(dists)
@@ -28,6 +33,9 @@ func newSearchContext(g *graph.Graph, startNode graph.VertexId) *searchContext {
 	}
 }
 
+// processNextNode extracts the highest-priority node from the queue, relaxes its edges,
+// and checks for a potential meeting point with the opposite search direction.
+// It updates the shortest path length and the meeting node if a shorter path is found.
 func (sc *searchContext) processNextNode(
 	oppositeDists map[graph.VertexId]float64,
 	shortestPathLength *float64,
@@ -37,6 +45,8 @@ func (sc *searchContext) processNextNode(
 	vertex := sc.pq.GetValue(item)
 	cost := sc.pq.GetPriority(item)
 
+	// Check if the current node has been reached by the other search.
+	// If so, a potential path has been found.
 	if oppositeDist, found := oppositeDists[vertex]; found && !math.IsInf(oppositeDist, 1) {
 		if potentialPathLength := cost + oppositeDist; potentialPathLength < *shortestPathLength {
 			*shortestPathLength = potentialPathLength
@@ -44,6 +54,7 @@ func (sc *searchContext) processNextNode(
 		}
 	}
 
+	// Relax outgoing edges.
 	for adjacent, edge := range sc.g.Edges[vertex] {
 		newWeight := cost + float64(edge.Weight)
 		if newWeight < sc.dists[adjacent] {
@@ -54,6 +65,14 @@ func (sc *searchContext) processNextNode(
 	}
 }
 
+// BiDirectionalDijkstraShortestPath finds the shortest path between a source and target node
+// in a graph using a bidirectional Dijkstra's algorithm. It runs two searches simultaneously:
+// one forward from the source on upGraph and one backward from the target on downGraph.
+// For Contraction Hierarchies, upGraph contains only upward edges, and downGraph contains only
+// downward edges. The search terminates when the sum of minimum distances from both search
+// frontiers exceeds the length of the best path found so far.
+// It returns the path as a slice of vertex IDs, the total path weight, and an error if no
+// path is found.
 func BiDirectionalDijkstraShortestPath(upGraph *graph.Graph, downGraph *graph.Graph, source, target graph.VertexId) ([]graph.VertexId, float64, error) {
 	if source == target {
 		if _, ok := upGraph.Edges[source]; ok {
@@ -71,10 +90,14 @@ func BiDirectionalDijkstraShortestPath(upGraph *graph.Graph, downGraph *graph.Gr
 	for fwdSearch.pq.Len() > 0 && bwdSearch.pq.Len() > 0 {
 		fwdMinDist := fwdSearch.pq.GetPriority(fwdSearch.pq.Peek())
 		bwdMinDist := bwdSearch.pq.GetPriority(bwdSearch.pq.Peek())
+
+		// Termination condition: if the sum of the smallest distances in both queues
+		// is greater than or equal to the current shortest path, no shorter path can be found.
 		if fwdMinDist+bwdMinDist >= currentShortestPath {
 			break
 		}
 
+		// Process the node from the search direction with the smaller minimum distance.
 		if fwdMinDist <= bwdMinDist {
 			fwdSearch.processNextNode(bwdSearch.dists, &currentShortestPath, &meetNode)
 		} else {
@@ -97,10 +120,12 @@ func BiDirectionalDijkstraShortestPath(upGraph *graph.Graph, downGraph *graph.Gr
 		return nil, 0, errBwd
 	}
 
+	// Reverse the backward path to get the correct order from meetNode to target.
 	pathBwd := make([]graph.VertexId, len(pathBwdReversed))
 	for i, j := 0, len(pathBwdReversed)-1; j >= 0; i, j = i+1, j-1 {
 		pathBwd[i] = pathBwdReversed[j]
 	}
 
+	// Combine the forward and backward paths, excluding the duplicated meetNode.
 	return append(pathFwd, pathBwd[1:]...), currentShortestPath, nil
 }
