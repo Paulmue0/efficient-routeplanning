@@ -1,2 +1,5 @@
 *json
 *.dot
+*.txt
+*.metis
+/KaHIP
