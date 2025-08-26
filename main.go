@@ -2,13 +2,63 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 
 	parser "github.com/PaulMue0/efficient-routeplanning/Parser"
 	"github.com/PaulMue0/efficient-routeplanning/pathfinding"
 )
 
 func main() {
+	CreateNodeOrdering()
+}
+
+func CreateNodeOrdering() {
+	dataDir := "./data/RoadNetworks"
+
+	patterns := []string{
+		"osm*.txt",
+		"example.txt",
+	}
+
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(filepath.Join(dataDir, pattern))
+		if err != nil {
+			log.Printf("Error globbing files with pattern %s: %v", pattern, err)
+			continue
+		}
+
+		for _, matchedFile := range matches {
+			name := filepath.Base(matchedFile)
+			fmt.Printf("Processing file: %s\n", name)
+
+			fileSystem := os.DirFS(dataDir)
+			network, err := parser.NewNetworkFromFS(fileSystem, name)
+			if err != nil {
+				log.Printf("Error parsing %s: %v", name, err)
+				continue
+			}
+			fmt.Println(network.NumNodes, network.NumEdges, len(network.Network.Vertices), len(network.Network.Edges))
+
+			outputFileName := name[:len(name)-len(filepath.Ext(name))] + ".metis"
+			file, err := os.Create(outputFileName)
+			if err != nil {
+				log.Fatalf("Failed to create file %s: %v", outputFileName, err)
+			}
+			defer file.Close()
+
+			log.Printf("Writing graph to METIS text file: %s...", outputFileName)
+			if err := parser.ToMetis(network.Network, file); err != nil {
+				log.Fatalf("Failed to write to METIS text format for %s: %v", name, err)
+			}
+
+			log.Println("Successfully created", outputFileName)
+		}
+	}
+}
+
+func TestOsm1() {
 	name := "osm1.txt"
 	dataDir := "./data/RoadNetworks"
 	fileSystem := os.DirFS(dataDir)
