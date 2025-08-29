@@ -2,7 +2,6 @@ package pathfinding
 
 import (
 	"container/heap"
-	"fmt"
 	"math"
 
 	collection "github.com/PaulMue0/efficient-routeplanning/Collection"
@@ -104,7 +103,6 @@ func BiDirectionalDijkstraShortestPath(upGraph *graph.Graph, downGraph *graph.Gr
 			bwdSearch.processNextNode(fwdSearch.dists, &currentShortestPath, &meetNode)
 		}
 	}
-	fmt.Println(currentShortestPath)
 
 	if math.IsInf(currentShortestPath, 1) {
 		return nil, 0, ErrTargetNotReachable
