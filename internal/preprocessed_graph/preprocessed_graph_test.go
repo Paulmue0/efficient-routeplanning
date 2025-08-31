@@ -8,20 +8,21 @@ import (
 	"testing"
 
 	"github.com/PaulMue0/efficient-routeplanning/internal/cch"
+	"github.com/PaulMue0/efficient-routeplanning/internal/ch"
 	"github.com/PaulMue0/efficient-routeplanning/internal/parser"
 	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
-	"github.com/segmentio/parquet-go"
 )
 
 func TestWriteAndReadCCH(t *testing.T) {
 	// 1. Setup: Preprocess the example graph
+	graphPath := "data/RoadNetworks/example.txt"
 	orderingPath := "../../data/KaHIP/example.ordering.txt"
 
 	// The parser needs a relative path from the project root, but the test runs in the module dir.
 	// So we construct the path relative to the test execution directory.
 	fs := os.DirFS("../..")
 
-	net, err := parser.NewNetworkFromFS(fs, "data/RoadNetworks/example.txt")
+	net, err := parser.NewNetworkFromFS(fs, graphPath)
 	if err != nil {
 		t.Fatalf("Failed to load graph: %v", err)
 	}
@@ -36,45 +37,86 @@ func TestWriteAndReadCCH(t *testing.T) {
 		t.Fatalf("CCH preprocessing failed: %v", err)
 	}
 
-	// 2. Convert to serializable format and write to Parquet
+	// 2. Convert to serializable format and write to gob file
+
 	preprocessedFile := FromCCH(cchOriginal)
 
 	tempDir := t.TempDir()
-	parquetPath := filepath.Join(tempDir, "test.parquet")
+	gobPath := filepath.Join(tempDir, "test.gob")
 
-	err = preprocessedFile.Write(parquetPath)
+	err = preprocessedFile.Write(gobPath)
 	if err != nil {
-		t.Fatalf("Failed to write Parquet file: %v", err)
+		t.Fatalf("Failed to write gob file: %v", err)
 	}
 
-	// 3. Read from Parquet
-	file, err := os.Open(parquetPath)
+	// 3. Read from gob file
+
+	readData, err := ReadCCH(gobPath)
 	if err != nil {
-		t.Fatalf("Failed to open file: %v", err)
-	}
-	defer file.Close()
-
-	reader := parquet.NewReader(file)
-
-	readData := PreprocessedCCHFile{}
-	if err := reader.Read(&readData); err != nil {
-		t.Fatalf("Failed to read parquet data: %v", err)
+		t.Fatalf("Failed to read gob data: %v", err)
 	}
 
 	// 4. Convert back and compare
+
 	cchReconstructed := readData.ToCCH()
 
 	// Custom comparison logic because of maps and unexported fields
 	if !reflect.DeepEqual(cchOriginal.ContractionOrder, cchReconstructed.ContractionOrder) {
 		t.Errorf("ContractionOrder mismatch: got %v, want %v", cchReconstructed.ContractionOrder, cchOriginal.ContractionOrder)
 	}
-	if !reflect.DeepEqual(cchOriginal.ContractionMap, cchReconstructed.ContractionMap) {
-		t.Errorf("ContractionMap mismatch: got %v, want %v", cchReconstructed.ContractionMap, cchOriginal.ContractionMap)
-	}
 	if !graphsAreEqual(cchOriginal.UpwardsGraph, cchReconstructed.UpwardsGraph) {
 		t.Error("UpwardsGraph is not equal")
 	}
 	if !graphsAreEqual(cchOriginal.DownwardsGraph, cchReconstructed.DownwardsGraph) {
+		t.Error("DownwardsGraph is not equal")
+	}
+}
+
+func TestWriteAndReadCH(t *testing.T) {
+	// 1. Setup: Preprocess the example graph
+	graphPath := "data/RoadNetworks/example.txt"
+
+	fs := os.DirFS("../..")
+	net, err := parser.NewNetworkFromFS(fs, graphPath)
+	if err != nil {
+		t.Fatalf("Failed to load graph: %v", err)
+	}
+
+	chOriginal := ch.NewContractionHierarchies()
+	chOriginal.Preprocess(net.Network) // CH preprocessing
+
+	// 2. Convert to serializable format and write to gob file
+
+	preprocessedFile := FromCH(chOriginal)
+
+	tempDir := t.TempDir()
+	gobPath := filepath.Join(tempDir, "test_ch.gob")
+
+	err = preprocessedFile.WriteCH(gobPath)
+	if err != nil {
+		t.Fatalf("Failed to write gob file: %v", err)
+	}
+
+	// 3. Read from gob file
+
+	readData, err := ReadCHFile(gobPath)
+	if err != nil {
+		t.Fatalf("Failed to read gob data: %v", err)
+	}
+
+	// 4. Convert back and compare
+
+	chReconstructed := readData.ToCH()
+
+	// Custom comparison logic
+	if !reflect.DeepEqual(chOriginal.ContractionOrder, chReconstructed.ContractionOrder) {
+		t.Errorf("ContractionOrder mismatch: got %v, want %v", chReconstructed.ContractionOrder, chOriginal.ContractionOrder)
+	}
+	// Compare graphs (UpwardsGraph and DownwardsGraph)
+	if !graphsAreEqual(chOriginal.UpwardsGraph, chReconstructed.UpwardsGraph) {
+		t.Error("UpwardsGraph is not equal")
+	}
+	if !graphsAreEqual(chOriginal.DownwardsGraph, chReconstructed.DownwardsGraph) {
 		t.Error("DownwardsGraph is not equal")
 	}
 }
@@ -98,17 +140,8 @@ func graphsAreEqual(g1, g2 *graph.Graph) bool {
 		return false
 	}
 	for u, edges1 := range g1.Edges {
-		edges2, ok := g2.Edges[u]
-		if !ok {
-			fmt.Printf("Missing source edge map for %d in second graph\n", u)
-			return false
-		}
-		if len(edges1) != len(edges2) {
-			fmt.Printf("Edge target count mismatch for source %d: %d != %d\n", u, len(edges1), len(edges2))
-			return false
-		}
 		for v, e1 := range edges1 {
-			e2, ok := edges2[v]
+			e2, ok := g2.Edges[u][v]
 			if !ok || e1.Target != e2.Target || e1.Weight != e2.Weight || e1.IsShortcut != e2.IsShortcut || e1.Via != e2.Via {
 				fmt.Printf("Edge mismatch for %d->%d: %v != %v\n", u, v, e1, e2)
 				return false
