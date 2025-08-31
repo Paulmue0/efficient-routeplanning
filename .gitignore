@@ -3,3 +3,4 @@
 *.txt
 *.metis
 /KaHIP
+.DS_Store
