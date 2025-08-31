@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 
 	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
@@ -149,14 +150,36 @@ func (c *CCH) initializeContraction(g *graph.Graph, orderingFilePath string) err
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	metisOrdering := make([]int, 0, len(g.Vertices))
+
+type metisPair struct {
+	id   int
+	rank int
+}
+pairs := []metisPair{}
+
 	for scanner.Scan() {
 		line := scanner.Text()
-		metisID, err := strconv.Atoi(line)
-		if err != nil {
-			return fmt.Errorf("invalid integer found in ordering file: %w", err)
+		parts := strings.Split(line, "\t")
+		if len(parts) == 2 {
+			id, err := strconv.Atoi(parts[0])
+			if err != nil {
+				return fmt.Errorf("invalid id in ordering file: %w", err)
+			}
+			rank, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return fmt.Errorf("invalid rank in ordering file: %w", err)
+			}
+			pairs = append(pairs, metisPair{id, rank})
 		}
-		metisOrdering = append(metisOrdering, metisID)
+	}
+
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].rank < pairs[j].rank
+	})
+
+	metisOrdering := make([]int, 0, len(g.Vertices))
+	for _, p := range pairs {
+		metisOrdering = append(metisOrdering, p.id)
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("error reading ordering file: %w", err)
