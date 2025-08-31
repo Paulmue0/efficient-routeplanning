@@ -1,6 +1,4 @@
-// In pathfinding_test.go
-
-package pathfinding
+package ch
 
 import (
 	"container/heap"
@@ -8,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	collection "github.com/PaulMue0/efficient-routeplanning/Collection"
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
-	parser "github.com/PaulMue0/efficient-routeplanning/Parser"
+	parser "github.com/PaulMue0/efficient-routeplanning/internal/parser"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
+	collection "github.com/PaulMue0/efficient-routeplanning/pkg/collection/heap_gen"
 )
 
 // --- Test Helper Functions ---

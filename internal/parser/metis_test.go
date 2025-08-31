@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
 // Helper function to create a temporary test directory with the specified content.
@@ -89,7 +89,7 @@ func TestToMetis(t *testing.T) {
 func TestToMetisFromFile(t *testing.T) {
 	// Note: This test requires a file to exist at the specified path.
 	name := "example.txt"
-	dataDir := "../data/RoadNetworks"
+	dataDir := "../../data/RoadNetworks"
 	fileSystem := os.DirFS(dataDir)
 	network, err := NewNetworkFromFS(fileSystem, name)
 	if err != nil {

@@ -1,4 +1,4 @@
-package pathfinding
+package cch
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
 // setupTestFile is a helper function to create a temporary file with specified content

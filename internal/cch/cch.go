@@ -1,6 +1,6 @@
-package pathfinding
+package cch
 
-import graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+import graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 
 /*
 * Customizable Contraction hierarchies is done in three phases

@@ -1,4 +1,4 @@
-package graph
+package collection
 
 import (
 	"slices"

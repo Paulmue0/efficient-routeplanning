@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
 func createTestGraph() *graph.Graph {
@@ -149,5 +149,50 @@ func TestDijkstraShortestPath(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDijkstraShortestPath_UnpackShortcut(t *testing.T) {
+	g := createTestGraph()
+
+	// The original shortest path from 0 to 3 is 0 -> 1 -> 3 with a cost of 5.
+	// The path 0 -> 2 -> 3 has a cost of 1 (0-2) + 7 (2-3) = 8.
+	// We add a shortcut for the path 0 -> 2 -> 3 with a weight of 4.
+	// This should make it the new shortest path.
+	const shortcutWeight = 4
+	g.AddEdge(0, 3, shortcutWeight, true, 2)
+	g.AddEdge(3, 0, shortcutWeight, true, 2)
+
+	source := graph.VertexId(0)
+	target := graph.VertexId(3)
+	wantPath := []graph.VertexId{0, 2, 3}
+	wantCost := float64(shortcutWeight)
+
+	gotPath, gotCost, err := DijkstraShortestPath(g, source, target, math.Inf(1))
+	if err != nil {
+		t.Fatalf("DijkstraShortestPath() returned an unexpected error: %v", err)
+	}
+
+	// Check path correctness (it should be unpacked)
+	if len(gotPath) != len(wantPath) {
+		t.Fatalf("got path length = %d, want %d. Got: %v, Want: %v", len(gotPath), len(wantPath), gotPath, wantPath)
+	}
+	for i := range gotPath {
+		if gotPath[i] != wantPath[i] {
+			t.Fatalf("path mismatch at index %d. got path %v, want %v", i, gotPath, wantPath)
+		}
+	}
+
+	// Check cost correctness (it should be the shortcut's weight)
+	if gotCost != wantCost {
+		t.Errorf("got cost = %f, want %f", gotCost, wantCost)
+	}
+
+	// For sanity check, calculate cost of unpacked path using original edges.
+	// This should be different from the shortcut cost.
+	unpackedPathCost := pathCost(g, gotPath)
+	originalPathCost := 1.0 + 7.0 // Cost of 0->2 + 2->3
+	if unpackedPathCost != originalPathCost {
+		t.Errorf("pathCost of unpacked path is %f, but expected %f (sum of original edge weights)", unpackedPathCost, originalPathCost)
 	}
 }

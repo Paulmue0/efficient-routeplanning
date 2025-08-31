@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	parser "github.com/PaulMue0/efficient-routeplanning/Parser"
-	"github.com/PaulMue0/efficient-routeplanning/pathfinding"
+	"github.com/PaulMue0/efficient-routeplanning/internal/ch"
+	parser "github.com/PaulMue0/efficient-routeplanning/internal/parser"
 )
 
 func main() {
@@ -73,7 +73,7 @@ func TestOsm1() {
 	}
 	fmt.Println(network.NumNodes, network.NumEdges, len(network.Network.Vertices), len(network.Network.Edges))
 
-	ch := pathfinding.NewContractionHierarchies()
+	ch := ch.NewContractionHierarchies()
 	ch.Preprocess(network.Network)
 
 	numShortcuts := 0

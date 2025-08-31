@@ -1,11 +1,11 @@
-package pathfinding
+package cch
 
 import (
 	"fmt"
 	"math"
 	"sort"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
 func (cch *CCH) Customize(originalGraph *graph.Graph) error {

@@ -1,12 +1,13 @@
-package pathfinding
+package ch
 
 import (
 	"container/heap"
 	"fmt"
 	"slices"
 
-	collection "github.com/PaulMue0/efficient-routeplanning/Collection"
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	pathfinding "github.com/PaulMue0/efficient-routeplanning/internal/pathfinding"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
+	collection "github.com/PaulMue0/efficient-routeplanning/pkg/collection/heap_gen"
 )
 
 type ContractionHierarchies struct {
@@ -110,14 +111,14 @@ func Shortcuts(g *graph.Graph, v graph.VertexId, insertFlag bool) int {
 			costViaV := float64(incidentEdges[u.Id].Weight) + float64(incidentEdges[w.Id].Weight)
 
 			// Check if the path u->v->w is a shortest path. Bound the search by `costViaV`.
-			_, shortestPathCost, _ := DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */)
+			_, shortestPathCost, _ := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */)
 			if shortestPathCost < costViaV {
 				continue // Path u->v->w is not a shortest path, so we ignore it.
 			}
 
 			// Check for an alternative path of the same length, ignoring v.
 			// This search is also bounded by `costViaV`.
-			_, _, err := DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */, v /* ignored */)
+			_, _, err := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */, v /* ignored */)
 			// A shortcut is needed only if the witness search fails to find a path within the bound.
 			if err != nil {
 				shortcutsFound++

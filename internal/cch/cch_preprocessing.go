@@ -1,4 +1,4 @@
-package pathfinding
+package cch
 
 import (
 	"bufio"
@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strconv"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
 func (c *CCH) Preprocess(g *graph.Graph, orderingFilePath string) error {

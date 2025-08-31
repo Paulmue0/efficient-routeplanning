@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
 func check(e error) {

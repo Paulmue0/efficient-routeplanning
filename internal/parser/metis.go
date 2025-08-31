@@ -6,7 +6,7 @@ import (
 	"io"
 	"sort"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
 // ToMetis converts a graph to the METIS text format and writes it to the provided writer.
