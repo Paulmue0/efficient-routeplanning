@@ -50,8 +50,18 @@ func (c *CCH) initializeGraphsWithVertices(g *graph.Graph) error {
 // populateGraphsWithEdges iterates through the original graph's edges and adds them
 // to the upwards and downwards graph based on the contraction order.
 func (c *CCH) populateGraphsWithEdges(g *graph.Graph) error {
+	seen := make(map[[2]graph.VertexId]bool)
 	for uID, outgoingEdges := range g.Edges {
 		for vID, edge := range outgoingEdges {
+			key := [2]graph.VertexId{uID, vID}
+			if uID > vID {
+				key = [2]graph.VertexId{vID, uID}
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
 			// If u's contraction rank is lower than v's, it's an upwards edge.
 			if c.ContractionMap[uID] < c.ContractionMap[vID] {
 				if err := c.UpwardsGraph.AddEdge(uID, vID, edge.Weight, false, -1); err != nil {
@@ -74,34 +84,41 @@ func (c *CCH) populateGraphsWithEdges(g *graph.Graph) error {
 	return nil
 }
 
-// addShortcuts iterates through the contraction order and adds "shortcuts" between
-// all down-neighbors and up-neighbors of each contracted vertex.
 func (c *CCH) addShortcuts() error {
 	for _, id := range c.ContractionOrder {
-		downNeighbors, err := c.DownwardsGraph.Neighbors(id)
-		if err != nil {
-			return fmt.Errorf("failed to get down-neighbors for vertex %d: %w", id, err)
-		}
-		upNeighbors, err := c.UpwardsGraph.Neighbors(id)
+		higherRankedNeighbors, err := c.UpwardsGraph.Neighbors(id)
 		if err != nil {
 			return fmt.Errorf("failed to get up-neighbors for vertex %d: %w", id, err)
 		}
 
-		// Connect all down-neighbors to all up-neighbors.
-		for _, u := range downNeighbors {
-			for _, w := range upNeighbors {
-				exists, err := c.UpwardsGraph.Adjacent(u.Id, w.Id)
+		// Connect all higher-ranked neighbors to create shortcuts for paths through 'id'.
+		for i := 0; i < len(higherRankedNeighbors); i++ {
+			for j := i + 1; j < len(higherRankedNeighbors); j++ {
+				uNode := higherRankedNeighbors[i]
+				wNode := higherRankedNeighbors[j]
+				u, w := uNode.Id, wNode.Id
+
+				// Determine the direction of the shortcut based on contraction rank.
+				// The edge in the UpwardsGraph always points from lower rank to higher rank.
+				var start, end graph.VertexId
+				if c.ContractionMap[u] < c.ContractionMap[w] {
+					start, end = u, w
+				} else {
+					start, end = w, u
+				}
+
+				exists, err := c.UpwardsGraph.Adjacent(start, end)
 				if err != nil {
-					return fmt.Errorf("failed to check adjacency between %d and %d: %w", u.Id, w.Id, err)
+					return fmt.Errorf("failed to check adjacency between %d and %d: %w", start, end, err)
 				}
 				if !exists {
-					// Add a shortcut if one doesn't already exist.
 					// The weight is set to infinity to be updated later by metric-dependent steps.
-					if err := c.UpwardsGraph.AddEdge(u.Id, w.Id, int(math.Inf(1)), true, id); err != nil {
-						return fmt.Errorf("failed to add shortcut (%d -> %d) to upwards graph: %w", u.Id, w.Id, err)
+					if err := c.UpwardsGraph.AddEdge(start, end, int(math.Inf(1)), true, id); err != nil {
+						return fmt.Errorf("failed to add shortcut (%d -> %d) to upwards graph: %w", start, end, err)
 					}
-					if err := c.DownwardsGraph.AddEdge(w.Id, u.Id, int(math.Inf(1)), true, id); err != nil {
-						return fmt.Errorf("failed to add shortcut (%d -> %d) to downwards graph: %w", w.Id, u.Id, err)
+					// The DownwardsGraph is the reverse of the UpwardsGraph.
+					if err := c.DownwardsGraph.AddEdge(end, start, int(math.Inf(1)), true, id); err != nil {
+						return fmt.Errorf("failed to add shortcut (%d -> %d) to downwards graph: %w", end, start, err)
 					}
 				}
 			}
