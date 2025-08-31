@@ -1,6 +1,7 @@
 package pathfinding
 
 import (
+	"math"
 	"testing"
 
 	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
@@ -61,6 +62,57 @@ func assertShortcut(t *testing.T, cch *CCH, u, v, via graph.VertexId, expectedWe
 	}
 	if edge.Weight != expectedWeight {
 		t.Errorf("Expected shortcut %d->%d weight %d, got %d", u, v, expectedWeight, edge.Weight)
+	}
+}
+
+func TestRespecting(t *testing.T) {
+	tests := []struct {
+		name     string
+		vertices []graph.VertexId
+		edges    [][3]int
+		ordering string
+		check    func(t *testing.T, cch *CCH)
+	}{
+		{
+			name:     "Base graph with no shortcuts",
+			vertices: []graph.VertexId{1, 2, 3},
+			edges:    [][3]int{{1, 2, 10}, {2, 3, 5}},
+			ordering: "3\n2\n1\n",
+			check: func(t *testing.T, cch *CCH) {
+				assertEdgeWeight(t, cch, 1, 2, 10)
+				assertEdgeWeight(t, cch, 2, 3, 5)
+			},
+		},
+		{
+			name:     "Shortcuts created in Preprocess are set to infinity",
+			vertices: []graph.VertexId{1, 2, 3, 4},
+			edges: [][3]int{
+				{1, 2, 1},
+				{1, 3, 1},
+				{1, 4, 10},
+				{2, 3, 5}, // direct worse than shortcut
+			},
+			ordering: "4\n3\n2\n1\n",
+			check: func(t *testing.T, cch *CCH) {
+				assertEdgeWeight(t, cch, 1, 3, 1)
+				assertEdgeWeight(t, cch, 2, 3, 5)
+				assertEdgeWeight(t, cch, 1, 2, 1)
+				assertShortcut(t, cch, 2, 4, 1, int(math.Inf(1)))
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			originalGraph := buildGraph(tc.vertices, tc.edges)
+			cch := preprocessCCH(t, originalGraph, tc.ordering)
+
+			if err := cch.Respecting(originalGraph); err != nil {
+				t.Fatalf("Respecting failed: %v", err)
+			}
+
+			tc.check(t, cch)
+		})
 	}
 }
 
@@ -132,7 +184,7 @@ func TestBasicCustomization(t *testing.T) {
 			g := buildGraph(tc.vertices, tc.edges)
 			cch := preprocessCCH(t, g, tc.ordering)
 
-			if err := cch.Customize(); err != nil {
+			if err := cch.Customize(g); err != nil {
 				t.Fatalf("Customize failed: %v", err)
 			}
 

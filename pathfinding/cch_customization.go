@@ -2,12 +2,52 @@ package pathfinding
 
 import (
 	"fmt"
+	"math"
 	"sort"
+
+	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
 )
 
-func (cch *CCH) Customize() error {
+func (cch *CCH) Customize(originalGraph *graph.Graph) error {
+	if err := cch.Respecting(originalGraph); err != nil {
+		return fmt.Errorf("failed to perform repecting %w", err)
+	}
+
 	if err := cch.basicCustomization(); err != nil {
 		return fmt.Errorf("failed to perform basic customization: %w", err)
+	}
+	return nil
+}
+
+func (cch *CCH) Respecting(originalGraph *graph.Graph) error {
+	for v := range cch.UpwardsGraph.Vertices {
+		for w, edge := range cch.UpwardsGraph.Edges[v] {
+			originalEdge, exists := originalGraph.Edges[v][w]
+
+			var (
+				newWeight  int
+				isShortcut bool
+				viaNode    graph.VertexId
+			)
+
+			if exists {
+				newWeight = originalEdge.Weight
+				isShortcut = false
+				viaNode = -1
+			} else {
+				newWeight = int(math.Inf(1))
+				isShortcut = true
+				viaNode = edge.Via
+			}
+
+			if err := cch.UpwardsGraph.UpdateEdge(v, w, newWeight, isShortcut, viaNode); err != nil {
+				return fmt.Errorf("failed to update upwards graph for edge %d->%d: %w", v, w, err)
+			}
+
+			if err := cch.DownwardsGraph.UpdateEdge(w, v, newWeight, isShortcut, viaNode); err != nil {
+				return fmt.Errorf("failed to update downwards graph for edge %d->%d: %w", w, v, err)
+			}
+		}
 	}
 	return nil
 }
@@ -79,6 +119,7 @@ func (cch *CCH) basicCustomization() error {
 				if newUpwardsWeight >= existingUpEdge.Weight || newDownwardsWeight >= existingDownEdge.Weight {
 					continue
 				}
+
 				if err := cch.UpwardsGraph.UpdateEdge(v.Id, w.Id, newUpwardsWeight, true, uId); err != nil {
 					return fmt.Errorf("failed to update upwards edge (%d, %d): %w", v.Id, w.Id, err)
 				}
