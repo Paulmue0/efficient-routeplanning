@@ -1,11 +1,29 @@
 package cch
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
 	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
+
+// assertTotalShortcuts checks that the total number of shortcuts in the CCH is as expected.
+func assertTotalShortcuts(t *testing.T, cch *CCH, expected int) {
+	t.Helper()
+	var shortcutCount int
+	for _, edges := range cch.UpwardsGraph.Edges {
+		for _, edge := range edges {
+			if edge.IsShortcut {
+				shortcutCount++
+			}
+		}
+	}
+
+	if shortcutCount != expected {
+		t.Errorf("Unexpected number of shortcuts. expected %d got %d", expected, shortcutCount)
+	}
+}
 
 // helper: assert edge weight
 func assertEdgeWeight(t *testing.T, cch *CCH, u, v graph.VertexId, expected int) {
@@ -164,6 +182,32 @@ func TestBasicCustomization(t *testing.T) {
 				if _, ok := cch.UpwardsGraph.Edges[0][3]; ok {
 					t.Errorf("Unexpected edge 0->3 found in disconnected graph")
 				}
+			},
+		},
+		{
+			name:     "exercise 2",
+			vertices: []graph.VertexId{1, 2, 3, 4, 5, 6, 7, 8},
+			edges: [][3]int{
+				{1, 7, 1}, // Component 1
+				{1, 8, 1}, // Component 2
+				{2, 4, 1},
+				{2, 8, 1},
+				{3, 4, 1},
+				{3, 8, 1},
+				{4, 7, 1},
+				{5, 6, 1},
+				{5, 6, 1},
+				{6, 7, 1},
+				{6, 8, 1},
+			},
+			// Any valid ordering works here.
+			// Format is "rank ID", both 1-based.
+			ordering: "8\n2 1\n3 2\n4 3\n5 4\n5 5\n7 6\n8 7\n9 8\n",
+			check: func(t *testing.T, cch *CCH) {
+				assertShortcut(t, cch, 7, 8, 1, 2)
+				assertShortcut(t, cch, 4, 8, 2, 2)
+				assertTotalShortcuts(t, cch, 2)
+				fmt.Println(cch.UpwardsGraph.NumEdges())
 			},
 		},
 	}

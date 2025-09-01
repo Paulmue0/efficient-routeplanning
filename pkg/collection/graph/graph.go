@@ -241,3 +241,11 @@ func (g *Graph) UpdateVertex(id VertexId, v Vertex) error {
 	g.Vertices[id] = v
 	return nil
 }
+
+func (g *Graph) NumEdges() int {
+	count := 0
+	for _, targets := range g.Edges {
+		count += len(targets)
+	}
+	return count
+}
