@@ -151,23 +151,23 @@ func (c *CCH) initializeContraction(g *graph.Graph, orderingFilePath string) err
 
 	scanner := bufio.NewScanner(file)
 
-type metisPair struct {
-	id   int
-	rank int
-}
-pairs := []metisPair{}
+	type metisPair struct {
+		id   int
+		rank int
+	}
+	pairs := []metisPair{}
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		parts := strings.Split(line, "\t")
+		parts := strings.Fields(line)
 		if len(parts) == 2 {
-			id, err := strconv.Atoi(parts[0])
-			if err != nil {
-				return fmt.Errorf("invalid id in ordering file: %w", err)
-			}
-			rank, err := strconv.Atoi(parts[1])
+			rank, err := strconv.Atoi(parts[0])
 			if err != nil {
 				return fmt.Errorf("invalid rank in ordering file: %w", err)
+			}
+			id, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return fmt.Errorf("METIS ID %d from file not found in graph mapping", id)
 			}
 			pairs = append(pairs, metisPair{id, rank})
 		}
@@ -199,12 +199,10 @@ pairs := []metisPair{}
 		originalNodeOrdering[i] = originalID
 	}
 
-	// The contraction order is the reverse of the node ordering.
-	contractionOrder := make([]graph.VertexId, len(originalNodeOrdering))
+	contractionOrder := originalNodeOrdering
 	contractionMap := make(map[graph.VertexId]int)
 	for i, nodeID := range originalNodeOrdering {
-		contractionOrder[len(originalNodeOrdering)-1-i] = nodeID
-		contractionMap[nodeID] = len(originalNodeOrdering) - 1 - i
+		contractionMap[nodeID] = i
 	}
 
 	c.ContractionOrder = contractionOrder

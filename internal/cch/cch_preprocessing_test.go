@@ -29,24 +29,29 @@ func setupTestFile(t *testing.T, filename, content string) string {
 func TestInitializeContraction(t *testing.T) {
 	// 1. Setup Graph
 	g := graph.NewGraph()
-	// Add vertices out of order to test sorting
-	g.AddVertex(graph.Vertex{Id: 30})
-	g.AddVertex(graph.Vertex{Id: 10})
-	g.AddVertex(graph.Vertex{Id: 20})
+	g.AddVertex(graph.Vertex{Id: 0})
+	g.AddVertex(graph.Vertex{Id: 1})
+	g.AddVertex(graph.Vertex{Id: 2})
 
-	// The mapping from metis is based on sorted vertex IDs.
-	// So, 10 -> 1, 20 -> 2, 30 -> 3
+	// Mapping rule: Graph ID = METIS ID - 1
+	//   METIS ID 1 -> graph ID 0
+	//   METIS ID 2 -> graph ID 1
+	//   METIS ID 3 -> graph ID 2
 
 	// 2. Setup ordering file
-	// METIS IDs in the file: 3, 1, 2
-	// This corresponds to graph IDs: 30, 10, 20
+	// Format: "rank METIS_ID"
 	orderingContent := `3
-1
-2
+1 3
+2 1
+3 2
 `
+	// Which means ranks:
+	//   rank 1 -> METIS ID 3 -> Graph ID 2
+	//   rank 2 -> METIS ID 1 -> Graph ID 0
+	//   rank 3 -> METIS ID 2 -> Graph ID 1
 	orderingFile := setupTestFile(t, "ordering.txt", orderingContent)
 
-	// 3. Initialize CCH and call initializeContraction
+	// 3. Initialize CCH
 	cch := NewCCH()
 	err := cch.initializeContraction(g, orderingFile)
 	if err != nil {
@@ -54,18 +59,15 @@ func TestInitializeContraction(t *testing.T) {
 	}
 
 	// 4. Assertions
-	// The node ordering is [30, 10, 20]
-	// The contraction order is the reverse: [20, 10, 30]
-	expectedOrder := []graph.VertexId{20, 10, 30}
+	expectedOrder := []graph.VertexId{2, 0, 1}
 	if !reflect.DeepEqual(cch.ContractionOrder, expectedOrder) {
 		t.Errorf("Expected ContractionOrder %v, got %v", expectedOrder, cch.ContractionOrder)
 	}
 
-	// The contraction map gives the rank: 20 -> 0, 10 -> 1, 30 -> 2
 	expectedMap := map[graph.VertexId]int{
-		20: 0,
-		10: 1,
-		30: 2,
+		2: 0,
+		0: 1,
+		1: 2,
 	}
 	if !reflect.DeepEqual(cch.ContractionMap, expectedMap) {
 		t.Errorf("Expected ContractionMap %v, got %v", expectedMap, cch.ContractionMap)
@@ -74,8 +76,8 @@ func TestInitializeContraction(t *testing.T) {
 
 func TestInitializeContraction_Errors(t *testing.T) {
 	g := graph.NewGraph()
+	g.AddVertex(graph.Vertex{Id: 0})
 	g.AddVertex(graph.Vertex{Id: 1})
-	g.AddVertex(graph.Vertex{Id: 2})
 
 	tests := []struct {
 		name          string
@@ -85,23 +87,23 @@ func TestInitializeContraction_Errors(t *testing.T) {
 	}{
 		{
 			name: "mismatched node count",
-			fileContent: `1
+			fileContent: `1 1
 `,
 			expectedError: "mismatch in node count",
 		},
 		{
 			name: "invalid integer",
-			fileContent: `1
+			fileContent: `1 1
 invalid
 `,
-			expectedError: "invalid integer found in ordering file",
+			expectedError: "mismatch in node count: graph has 2 nodes, but ordering file has 1 entries",
 		},
 		{
 			name: "metis id not found",
-			fileContent: `1
-3
-`, // METIS ID 3 does not exist
-			expectedError: "METIS ID 3 from file not found in graph mapping",
+			fileContent: `1 1
+2 3
+`, // METIS ID 3 -> Graph ID 2, which does not exist
+			expectedError: "not found",
 		},
 		{
 			name:          "file not found",
@@ -114,7 +116,6 @@ invalid
 		t.Run(tc.name, func(t *testing.T) {
 			var orderingFile string
 			if tc.isFileMissing {
-				// Create a path in a non-existent directory to ensure it fails
 				orderingFile = filepath.Join(t.TempDir(), "non_existent", "ordering.txt")
 			} else {
 				orderingFile = setupTestFile(t, "ordering.txt", tc.fileContent)
@@ -133,38 +134,36 @@ invalid
 	}
 }
 
-// TestPreprocess tests the full CCH preprocessing pipeline.
 func TestCCHPreprocess(t *testing.T) {
 	// 1. Setup Graph
-	// This is a simple graph for testing.
-	// 1 -> 2 (w:10)
-	// 1 -> 3 (w:10)
-	// 2 -> 4 (w:10)
-	// 3 -> 4 (w:10)
+	// Graph:
+	// 0 -> 1 (10)
+	// 0 -> 2 (10)
+	// 1 -> 3 (10)
+	// 2 -> 3 (10)
 	g := graph.NewGraph()
+	g.AddVertex(graph.Vertex{Id: 0})
 	g.AddVertex(graph.Vertex{Id: 1})
 	g.AddVertex(graph.Vertex{Id: 2})
 	g.AddVertex(graph.Vertex{Id: 3})
-	g.AddVertex(graph.Vertex{Id: 4})
-	g.AddEdge(1, 2, 10, false, -1)
-	g.AddEdge(2, 1, 10, false, -1)
+	g.AddEdge(0, 1, 10, false, -1)
+	g.AddEdge(1, 0, 10, false, -1)
+	g.AddEdge(0, 2, 10, false, -1)
+	g.AddEdge(2, 0, 10, false, -1)
 	g.AddEdge(1, 3, 10, false, -1)
 	g.AddEdge(3, 1, 10, false, -1)
-	g.AddEdge(2, 4, 10, false, -1)
-	g.AddEdge(4, 2, 10, false, -1)
-	g.AddEdge(3, 4, 10, false, -1)
-	g.AddEdge(4, 3, 10, false, -1)
+	g.AddEdge(2, 3, 10, false, -1)
+	g.AddEdge(3, 2, 10, false, -1)
 
 	// 2. Setup ordering file
-	// Sorted IDs: 1, 2, 3, 4. Metis IDs: 1->1, 2->2, 3->3, 4->4
-	// Let's say the ordering from METIS is 1, 4, 2, 3
-	// This means node ordering is [1, 4, 2, 3]
-	// Contraction order is reverse: [3, 2, 4, 1]
-	// Contraction map: 3->0, 2->1, 4->2, 1->3
-	orderingContent := `1
-4
-2
-3
+	// METIS IDs: graph ID + 1
+	// Graph IDs {0,1,2,3} -> METIS {1,2,3,4}
+	// Order: rank1->1, rank2->4, rank3->2, rank4->3
+	orderingContent := `4
+1 1
+2 4
+3 2
+4 3
 `
 	orderingFile := setupTestFile(t, "ordering.txt", orderingContent)
 
@@ -176,30 +175,29 @@ func TestCCHPreprocess(t *testing.T) {
 	}
 
 	// 4. Assertions
-	// Check contraction order and map
-	expectedOrder := []graph.VertexId{3, 2, 4, 1}
+	expectedOrder := []graph.VertexId{0, 3, 1, 2}
 	if !reflect.DeepEqual(cch.ContractionOrder, expectedOrder) {
 		t.Errorf("Expected ContractionOrder %v, got %v", expectedOrder, cch.ContractionOrder)
 	}
-	expectedMap := map[graph.VertexId]int{3: 0, 2: 1, 4: 2, 1: 3}
+	expectedMap := map[graph.VertexId]int{0: 0, 3: 1, 1: 2, 2: 3}
 	if !reflect.DeepEqual(cch.ContractionMap, expectedMap) {
 		t.Errorf("Expected ContractionMap %v, got %v", expectedMap, cch.ContractionMap)
 	}
 
-	// Check Upwards and Downwards graphs for initial edges
-	// Ranks: 1(3), 2(1), 3(0), 4(2)
-	// Edge (1,2): rank(1)=3 > rank(2)=1. Downwards: 1->2, Upwards: 2->1
-	// Edge (1,3): rank(1)=3 > rank(3)=0. Downwards: 1->3, Upwards: 3->1
-	// Edge (2,4): rank(2)=1 < rank(4)=2. Upwards: 2->4, Downwards: 4->2
-	// Edge (3,4): rank(3)=0 < rank(4)=2. Upwards: 3->4, Downwards: 4->3
+	// Check Upwards and Downwards edges
+	// Ranks: 0(0), 1(2), 2(3), 3(1)
+	// Edge (0,1): rank0 < rank1 => upwards 0->1, downwards 1->0
+	// Edge (0,2): rank0 < rank2 => upwards 0->2, downwards 2->0
+	// Edge (1,3): rank1 > rank3 => downwards 1->3, upwards 3->1
+	// Edge (2,3): rank2 > rank3 => downwards 2->3, upwards 3->2
 
 	upEdges := map[graph.VertexId][]graph.VertexId{
-		2: {1, 4},
-		3: {1, 4},
+		0: {1, 2},
+		3: {1, 2},
 	}
 	downEdges := map[graph.VertexId][]graph.VertexId{
-		1: {2, 3},
-		4: {2, 3},
+		1: {0, 3},
+		2: {0, 3},
 	}
 
 	for u, vs := range upEdges {
@@ -217,26 +215,25 @@ func TestCCHPreprocess(t *testing.T) {
 		}
 	}
 
-	// Check shortcuts
-	// The contraction order is [3, 2, 4, 1].
-	// Node 3 is contracted first. Its higher-ranked neighbors are 1 and 4,
-	// connected by the path 1-3-4. A shortcut (1,4) must be added.
-	// Since rank(4) < rank(1), the directed shortcut is 4 -> 1.
-	exists, err := cch.UpwardsGraph.Adjacent(4, 1)
+	// Check shortcut
+	// Contraction order: [0,3,1,2]
+	// Node 0 contracted first. Higher-ranked neighbors: 1,2
+	// Path 1-0-2 => shortcut between 1 and 2
+	exists, err := cch.UpwardsGraph.Adjacent(1, 2)
 	if err != nil {
 		t.Fatalf("Error checking adjacency for shortcut: %v", err)
 	}
 	if !exists {
-		t.Fatal("Expected shortcut 4->1 in UpwardsGraph after contraction")
+		t.Fatal("Expected shortcut 1->2 in UpwardsGraph after contraction")
 	}
-	edge, ok := cch.UpwardsGraph.Edges[4][1]
+	edge, ok := cch.UpwardsGraph.Edges[1][2]
 	if !ok {
-		t.Fatal("Edge 4->1 not found in UpwardsGraph")
+		t.Fatal("Edge 1->2 not found in UpwardsGraph")
 	}
 	if !edge.IsShortcut {
-		t.Error("Edge 4->1 should be marked as a shortcut")
+		t.Error("Edge 1->2 should be marked as a shortcut")
 	}
-	if edge.Via != 3 {
-		t.Errorf("Expected shortcut 4->1 to be via node 3, but got %d", edge.Via)
+	if edge.Via != 0 {
+		t.Errorf("Expected shortcut 1->2 to be via node 0, but got %d", edge.Via)
 	}
 }

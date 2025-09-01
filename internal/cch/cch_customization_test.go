@@ -75,29 +75,35 @@ func TestRespecting(t *testing.T) {
 	}{
 		{
 			name:     "Base graph with no shortcuts",
-			vertices: []graph.VertexId{1, 2, 3},
-			edges:    [][3]int{{1, 2, 10}, {2, 3, 5}},
-			ordering: "3\n2\n1\n",
+			vertices: []graph.VertexId{0, 1, 2},
+			edges:    [][3]int{{0, 1, 10}, {1, 2, 5}},
+			// Order 0->1->2 ensures all original edges are upward edges.
+			// Format is "rank ID", both 1-based.
+			ordering: "3\n1 1\n2 2\n3 3\n",
 			check: func(t *testing.T, cch *CCH) {
-				assertEdgeWeight(t, cch, 1, 2, 10)
-				assertEdgeWeight(t, cch, 2, 3, 5)
+				assertEdgeWeight(t, cch, 0, 1, 10)
+				assertEdgeWeight(t, cch, 1, 2, 5)
 			},
 		},
 		{
 			name:     "Shortcuts created in Preprocess are set to infinity",
-			vertices: []graph.VertexId{1, 2, 3, 4},
+			vertices: []graph.VertexId{0, 1, 2, 3},
 			edges: [][3]int{
-				{1, 2, 1},
-				{1, 3, 1},
-				{1, 4, 10},
-				{2, 3, 5}, // direct worse than shortcut
+				{0, 1, 1},
+				{0, 2, 1},
+				{0, 3, 10},
+				{1, 2, 5}, // direct edge is worse than shortcut 1->0->2 (cost 2)
 			},
-			ordering: "4\n3\n2\n1\n",
+			// Contract 0 first to create shortcuts between its neighbors (1,2,3).
+			// Format is "rank ID", both 1-based.
+			ordering: "4\n1 1\n2 2\n3 3\n4 4\n",
 			check: func(t *testing.T, cch *CCH) {
-				assertEdgeWeight(t, cch, 1, 3, 1)
-				assertEdgeWeight(t, cch, 2, 3, 5)
-				assertEdgeWeight(t, cch, 1, 2, 1)
-				assertShortcut(t, cch, 2, 4, 1, int(math.Inf(1)))
+				assertEdgeWeight(t, cch, 0, 2, 1)
+				assertEdgeWeight(t, cch, 1, 2, 5)
+				assertEdgeWeight(t, cch, 0, 1, 1)
+				// This shortcut (1->3 via 0) is created during preprocess.
+				// Respecting() resets its weight to infinity before customization.
+				assertShortcut(t, cch, 1, 3, 0, int(math.Inf(1)))
 			},
 		},
 	}
@@ -126,54 +132,65 @@ func TestBasicCustomization(t *testing.T) {
 	}{
 		{
 			name:     "existing edge should not be overwritten by worse shortcut",
-			vertices: []graph.VertexId{1, 2, 3},
+			vertices: []graph.VertexId{0, 1, 2},
 			edges: [][3]int{
-				{1, 2, 10},
-				{1, 3, 1},
-				{2, 3, 1},
+				{0, 1, 10},
+				{0, 2, 1},
+				{1, 2, 1}, // Path 1->0->2 has cost 11, which is worse
 			},
-			ordering: "3\n2\n1\n",
+			// Contract 0 first, so we check for a shortcut between 1 and 2.
+			// Format is "rank ID", both 1-based.
+			ordering: "3\n1 1\n2 2\n3 3\n",
 			check: func(t *testing.T, cch *CCH) {
-				assertEdgeWeight(t, cch, 2, 3, 1)
+				assertEdgeWeight(t, cch, 1, 2, 1)
 			},
 		},
 		{
 			name:     "shortcut improves edge weight",
-			vertices: []graph.VertexId{1, 2, 3},
+			vertices: []graph.VertexId{0, 1, 2},
 			edges: [][3]int{
-				{1, 2, 1},
-				{1, 3, 1},
-				{2, 3, 5}, // direct worse than shortcut
+				{0, 1, 1},
+				{0, 2, 1},
+				{1, 2, 5}, // direct edge (cost 5) is worse than shortcut 1->0->2 (cost 2)
 			},
-			ordering: "3\n2\n1\n",
+			// Contract 0 first to find the better shortcut path between 1 and 2.
+			// Format is "rank ID", both 1-based.
+			ordering: "3\n1 1\n2 2\n3 3\n",
 			check: func(t *testing.T, cch *CCH) {
-				assertShortcut(t, cch, 2, 3, 1, 2) // 2->3 is now a shortcut via 1
+				assertShortcut(t, cch, 1, 2, 0, 2) // 1->2 is now a shortcut via 0
 			},
 		},
 		{
 			name:     "shortcut creates missing upward edge",
-			vertices: []graph.VertexId{1, 2, 3},
+			vertices: []graph.VertexId{0, 1, 2},
 			edges: [][3]int{
-				{1, 2, 1},
-				{1, 3, 1},
-				// no direct 2->3
+				{0, 1, 1},
+				{0, 2, 1},
+				// no direct 1->2 edge
 			},
-			ordering: "3\n2\n1\n",
+			// Contract 0 first to create a shortcut where no edge existed.
+			// Format is "rank ID", both 1-based.
+			ordering: "3\n1 1\n2 2\n3 3\n",
 			check: func(t *testing.T, cch *CCH) {
-				assertEdgeWeight(t, cch, 2, 3, 2) // added via shortcut
+				assertEdgeWeight(t, cch, 1, 2, 2) // added via shortcut 1->0->2
 			},
 		},
 		{
 			name:     "disconnected nodes remain disconnected",
-			vertices: []graph.VertexId{1, 2, 3, 4},
+			vertices: []graph.VertexId{0, 1, 2, 3},
 			edges: [][3]int{
-				{1, 2, 1},
-				{3, 4, 1},
+				{0, 1, 1}, // Component 1
+				{2, 3, 1}, // Component 2
 			},
-			ordering: "4\n3\n2\n1\n",
+			// Any valid ordering works here.
+			// Format is "rank ID", both 1-based.
+			ordering: "4\n1 1\n2 2\n3 3\n4 4\n",
 			check: func(t *testing.T, cch *CCH) {
-				if _, ok := cch.UpwardsGraph.Edges[2][3]; ok {
-					t.Errorf("Unexpected edge 2->3 found in disconnected graph")
+				if _, ok := cch.UpwardsGraph.Edges[1][2]; ok {
+					t.Errorf("Unexpected edge 1->2 found in disconnected graph")
+				}
+				if _, ok := cch.UpwardsGraph.Edges[0][3]; ok {
+					t.Errorf("Unexpected edge 0->3 found in disconnected graph")
 				}
 			},
 		},
