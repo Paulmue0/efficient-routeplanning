@@ -9,7 +9,7 @@ for file in *.metis; do
 
     echo "Processing $file..."
 
-    ./KaHIP/deploy/node_ordering "$file" --output_filename="$output_filename"
+    ./KaHIP/deploy/node_ordering "$file" --output_filename="$output_filename" --preconfiguration=strong
 
     echo "Completed $file. Output saved to $output_filename"
     echo "--------------------------------------------------"
