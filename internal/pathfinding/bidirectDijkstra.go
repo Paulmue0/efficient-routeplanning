@@ -92,7 +92,8 @@ func BiDirectionalDijkstraShortestPath(upGraph *graph.Graph, downGraph *graph.Gr
 
 		// Termination condition: if the sum of the smallest distances in both queues
 		// is greater than or equal to the current shortest path, no shorter path can be found.
-		if fwdMinDist+bwdMinDist >= currentShortestPath {
+		// This check is only performed if a path has already been found.
+		if !math.IsInf(currentShortestPath, 1) && fwdMinDist+bwdMinDist >= currentShortestPath {
 			break
 		}
 
