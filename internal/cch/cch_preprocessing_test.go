@@ -1,7 +1,6 @@
 package cch
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -9,22 +8,6 @@ import (
 
 	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
-
-// setupTestFile is a helper function to create a temporary file with specified content
-// for testing purposes.
-func setupTestFile(t *testing.T, filename, content string) string {
-	t.Helper()
-
-	// Create a temporary directory for the test file
-	tempDir := t.TempDir()
-
-	tempFile := filepath.Join(tempDir, filename)
-	if err := os.WriteFile(tempFile, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to write temp file: %v", err)
-	}
-
-	return tempFile
-}
 
 func TestInitializeContraction(t *testing.T) {
 	// 1. Setup Graph
