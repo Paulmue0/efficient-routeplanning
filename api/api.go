@@ -81,8 +81,9 @@ func chHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type QueryResponse struct {
-	Path   []graph.VertexId `json:"path"`
-	Weight float64          `json:"weight"`
+	Path        []graph.VertexId `json:"path"`
+	Weight      float64          `json:"weight"`
+	QueryTimeMs float64          `json:"queryTimeMs"`
 }
 
 func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +110,11 @@ func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("cchInstance is not nil, UpwardsGraph has %d vertices", len(cchInstance.UpwardsGraph.Vertices))
 
+	start := time.Now() // Start timing
 	path, weight, err := cchInstance.Query(graph.VertexId(from), graph.VertexId(to))
+	duration := time.Since(start) // End timing
+	queryTimeMs := float64(duration.Nanoseconds()) / 1e6 // Convert to milliseconds
+
 	if err != nil {
 		http.Error(w, "Query failed", http.StatusInternalServerError)
 		log.Printf("CCH query failed: %v", err)
@@ -117,7 +122,7 @@ func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight})
+	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight, QueryTimeMs: queryTimeMs})
 }
 
 func chQueryHandler(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +141,11 @@ func chQueryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now() // Start timing
 	path, weight, err := chInstance.Query(graph.VertexId(from), graph.VertexId(to))
+	duration := time.Since(start) // End timing
+	queryTimeMs := float64(duration.Nanoseconds()) / 1e6 // Convert to milliseconds
+
 	if err != nil {
 		http.Error(w, "Query failed", http.StatusInternalServerError)
 		log.Printf("CH query failed: %v", err)
@@ -144,5 +153,5 @@ func chQueryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight})
+	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight, QueryTimeMs: queryTimeMs})
 }
