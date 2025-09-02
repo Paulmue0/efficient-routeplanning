@@ -56,7 +56,6 @@ func (cch *CCH) unpackEdge(u, v graph.VertexId) ([]graph.VertexId, error) {
 	var edge graph.Edge
 	var ok bool
 
-	// The edge must exist in either the upwards or downwards graph.
 	edge, ok = cch.UpwardsGraph.Edges[u][v]
 	if !ok {
 		edge, ok = cch.DownwardsGraph.Edges[u][v]
@@ -81,6 +80,6 @@ func (cch *CCH) unpackEdge(u, v graph.VertexId) ([]graph.VertexId, error) {
 
 	// Combine the two unpacked sub-paths.
 	// path1 is [u, ..., via], path2 is [via, ..., v].
-	// We append path2[1:] to path1 to get [u, ..., via, ..., v].
+	// append path2[1:] to path1 to get [u, ..., via, ..., v].
 	return append(path1, path2[1:]...), nil
 }
