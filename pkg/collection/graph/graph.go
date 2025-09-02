@@ -128,14 +128,15 @@ func (g *Graph) UpdateEdge(x, y VertexId, weight int, shortcut bool, via VertexI
 		return ErrEdgeNotFound
 	}
 
-	existingEdge, exists := g.Edges[x][y]
+	_, exists := g.Edges[x][y]
+	// existingEdge, exists := g.Edges[x][y]
 	if !exists {
 		return ErrEdgeNotFound // Cannot update an edge that does not exist.
 	}
 
-	if weight < existingEdge.Weight {
-		g.Edges[x][y] = Edge{Target: y, Weight: weight, IsShortcut: shortcut, Via: via}
-	}
+	// if weight < existingEdge.Weight {
+	g.Edges[x][y] = Edge{Target: y, Weight: weight, IsShortcut: shortcut, Via: via}
+	// }
 
 	return nil
 }
