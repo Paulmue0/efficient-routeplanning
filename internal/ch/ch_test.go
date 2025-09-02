@@ -301,7 +301,6 @@ func TestQuery(t *testing.T) {
 		expectedPath2 := []graph.VertexId{4, 6, 5}
 
 		path, weight, err := ch.Query(source, target)
-
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
 		}
@@ -322,7 +321,6 @@ func TestQuery(t *testing.T) {
 		expectedPath := []graph.VertexId{0, 1, 5, 6}
 
 		path, weight, err := ch.Query(source, target)
-
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
 		}
@@ -343,7 +341,39 @@ func TestQuery(t *testing.T) {
 		expectedPath := []graph.VertexId{3}
 
 		path, weight, err := ch.Query(source, target)
+		if err != nil {
+			t.Fatalf("Query failed: %v", err)
+		}
 
+		if weight != expectedWeight {
+			t.Errorf("got weight %f, want %f", weight, expectedWeight)
+		}
+
+		if !reflect.DeepEqual(path, expectedPath) {
+			t.Errorf("got path %v, want %v", path, expectedPath)
+		}
+	})
+}
+
+func TestQueryWithSpecificContractionOrder(t *testing.T) {
+	gForPreprocess := createGraphFromSlidedeck()
+	ch := NewContractionHierarchies()
+
+	specificOrder := []graph.VertexId{6, 2, 3, 5, 0, 7, 1, 4}
+
+	for _, vId := range specificOrder {
+		if _, ok := gForPreprocess.Vertices[vId]; ok {
+			ch.Contract(gForPreprocess, vId)
+		}
+	}
+
+	t.Run("Path 0 to 6 with specific contraction order", func(t *testing.T) {
+		source := graph.VertexId(0)
+		target := graph.VertexId(6)
+		expectedWeight := 9.0
+		expectedPath := []graph.VertexId{0, 1, 5, 6}
+
+		path, weight, err := ch.Query(source, target)
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
 		}
@@ -373,3 +403,4 @@ func BenchmarkOsm1(b *testing.B) {
 
 	}
 }
+

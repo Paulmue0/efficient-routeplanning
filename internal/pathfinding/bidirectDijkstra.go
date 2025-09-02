@@ -81,7 +81,7 @@ func BiDirectionalDijkstraShortestPath(upGraph *graph.Graph, downGraph *graph.Gr
 	}
 
 	fwdSearch := newSearchContext(upGraph, source)
-	bwdSearch := newSearchContext(downGraph, target)
+	bwdSearch := newSearchContext(upGraph, target)
 
 	currentShortestPath := math.Inf(1)
 	var meetNode graph.VertexId
@@ -103,6 +103,15 @@ func BiDirectionalDijkstraShortestPath(upGraph *graph.Graph, downGraph *graph.Gr
 		} else {
 			bwdSearch.processNextNode(fwdSearch.dists, &currentShortestPath, &meetNode)
 		}
+	}
+
+	// One of the searches may be exhausted. Continue with the other until its priority queue
+	// is empty or the minimum distance is greater than the current shortest path.
+	for fwdSearch.pq.Len() > 0 && (math.IsInf(currentShortestPath, 1) || fwdSearch.pq.GetPriority(fwdSearch.pq.Peek()) < currentShortestPath) {
+		fwdSearch.processNextNode(bwdSearch.dists, &currentShortestPath, &meetNode)
+	}
+	for bwdSearch.pq.Len() > 0 && (math.IsInf(currentShortestPath, 1) || bwdSearch.pq.GetPriority(bwdSearch.pq.Peek()) < currentShortestPath) {
+		bwdSearch.processNextNode(fwdSearch.dists, &currentShortestPath, &meetNode)
 	}
 
 	if math.IsInf(currentShortestPath, 1) {

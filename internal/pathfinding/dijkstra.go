@@ -61,7 +61,7 @@ func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId, bound f
 
 func initializeWeights(g *graph.Graph, source graph.VertexId) map[graph.VertexId]float64 {
 	weights := make(map[graph.VertexId]float64)
-	for vertex := range g.Edges {
+	for vertex := range g.Vertices {
 		if vertex == source {
 			weights[vertex] = 0
 		} else {
