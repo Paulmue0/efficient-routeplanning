@@ -157,3 +157,81 @@ func EdgeDifference(g *graph.Graph, v graph.VertexId) int {
 	shortcuts := Shortcuts(g, v, false)
 	return shortcuts - degree
 }
+
+// Query finds the shortest path between source and target using the CH.
+// It performs a bidirectional Dijkstra search on the CH and then unpacks
+// the resulting path to resolve any shortcuts.
+func (c *ContractionHierarchies) Query(source, target graph.VertexId) ([]graph.VertexId, float64, error) {
+	path, weight, err := pathfinding.BiDirectionalDijkstraShortestPath(c.UpwardsGraph, c.DownwardsGraph, source, target)
+	if err != nil {
+		return nil, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
+	}
+
+	if len(path) == 0 {
+		return []graph.VertexId{}, weight, nil
+	}
+
+	unpackedPath, err := c.unpackPath(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to unpack path: %w", err)
+	}
+
+	return unpackedPath, weight, nil
+}
+
+// unpackPath takes a path containing shortcuts and expands them into the original edges.
+func (c *ContractionHierarchies) unpackPath(path []graph.VertexId) ([]graph.VertexId, error) {
+	if len(path) < 2 {
+		return path, nil
+	}
+
+	fullPath := []graph.VertexId{path[0]}
+
+	for i := 0; i < len(path)-1; i++ {
+		u, v := path[i], path[i+1]
+		segment, err := c.unpackEdge(u, v)
+		if err != nil {
+			return nil, err
+		}
+		// Append the unpacked segment, skipping the first node to avoid duplication.
+		fullPath = append(fullPath, segment[1:]...)
+	}
+
+	return fullPath, nil
+}
+
+// unpackEdge recursively unpacks a single edge (u, v).
+// If the edge is a shortcut, it finds the intermediate node and recursively
+// unpacks the two new segments.
+func (c *ContractionHierarchies) unpackEdge(u, v graph.VertexId) ([]graph.VertexId, error) {
+	var edge graph.Edge
+	var ok bool
+
+	// The edge must exist in either the upwards or downwards graph.
+	edge, ok = c.UpwardsGraph.Edges[u][v]
+	if !ok {
+		edge, ok = c.DownwardsGraph.Edges[u][v]
+		if !ok {
+			return nil, fmt.Errorf("no edge found between %d and %d in CH graphs", u, v)
+		}
+	}
+
+	if !edge.IsShortcut {
+		return []graph.VertexId{u, v}, nil
+	}
+
+	via := edge.Via
+	path1, err := c.unpackEdge(u, via)
+	if err != nil {
+		return nil, err
+	}
+	path2, err := c.unpackEdge(via, v)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combine the two unpacked sub-paths.
+	// path1 is [u, ..., via], path2 is [via, ..., v].
+	// We append path2[1:] to path1 to get [u, ..., via, ..., v].
+	return append(path1, path2[1:]...), nil
+}
