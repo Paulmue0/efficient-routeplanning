@@ -53,7 +53,7 @@ func (c *CCH) initializeGraphsWithVertices(g *graph.Graph) error {
 func (c *CCH) populateGraphsWithEdges(g *graph.Graph) error {
 	seen := make(map[[2]graph.VertexId]bool)
 	for uID, outgoingEdges := range g.Edges {
-		for vID, edge := range outgoingEdges {
+		for vID := range outgoingEdges {
 			key := [2]graph.VertexId{uID, vID}
 			if uID > vID {
 				key = [2]graph.VertexId{vID, uID}
@@ -65,18 +65,18 @@ func (c *CCH) populateGraphsWithEdges(g *graph.Graph) error {
 
 			// If u's contraction rank is lower than v's, it's an upwards edge.
 			if c.ContractionMap[uID] < c.ContractionMap[vID] {
-				if err := c.UpwardsGraph.AddEdge(uID, vID, edge.Weight, false, -1); err != nil {
+				if err := c.UpwardsGraph.AddEdge(uID, vID, 1, false, -1); err != nil {
 					return fmt.Errorf("failed to add edge (%d -> %d) to upwards graph: %w", uID, vID, err)
 				}
-				if err := c.DownwardsGraph.AddEdge(vID, uID, edge.Weight, false, -1); err != nil {
+				if err := c.DownwardsGraph.AddEdge(vID, uID, 1, false, -1); err != nil {
 					return fmt.Errorf("failed to add edge (%d -> %d) to DownwardsGraph graph: %w", vID, uID, err)
 				}
 			} else {
 				// Otherwise, it's a downwards edge.
-				if err := c.DownwardsGraph.AddEdge(uID, vID, edge.Weight, false, -1); err != nil {
+				if err := c.DownwardsGraph.AddEdge(uID, vID, 1, false, -1); err != nil {
 					return fmt.Errorf("failed to add edge (%d -> %d) to downwards graph: %w", uID, vID, err)
 				}
-				if err := c.UpwardsGraph.AddEdge(vID, uID, edge.Weight, false, -1); err != nil {
+				if err := c.UpwardsGraph.AddEdge(vID, uID, 1, false, -1); err != nil {
 					return fmt.Errorf("failed to add edge (%d -> %d) to downwards graph: %w", vID, uID, err)
 				}
 			}
