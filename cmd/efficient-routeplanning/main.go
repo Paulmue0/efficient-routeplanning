@@ -5,13 +5,46 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/PaulMue0/efficient-routeplanning/internal/cch"
 	"github.com/PaulMue0/efficient-routeplanning/internal/ch"
 	parser "github.com/PaulMue0/efficient-routeplanning/internal/parser"
 )
 
 func main() {
-	CreateNodeOrdering()
+	// CreateNodeOrdering()
+	testCCHOsm5()
+}
+
+func testCCHOsm5() {
+	name := "osm1.txt"
+	dataDir := "../../data/RoadNetworks"
+	fileSystem := os.DirFS(dataDir)
+	network, err := parser.NewNetworkFromFS(fileSystem, name)
+	log.Printf("File: %s, NumNodes: %d, NumEdges%d", name, network.NumNodes, network.NumEdges)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	cch := cch.NewCCH()
+	log.Println("start preprocessing")
+	start := time.Now()
+	err = cch.Preprocess(network.Network, "../../osm1.ordering")
+	if err != nil {
+		log.Fatal(err)
+	}
+	duration := time.Since(start)
+	numShortcuts := 0
+	for _, edges := range cch.UpwardsGraph.Edges {
+		for _, edge := range edges {
+			if edge.IsShortcut {
+				numShortcuts++
+			}
+		}
+	}
+	log.Printf("finished preprocessing. added %d shortcuts in %s", numShortcuts, duration)
+	log.Print("vertices in graph", len(cch.UpwardsGraph.Vertices))
 }
 
 func CreateNodeOrdering() {
