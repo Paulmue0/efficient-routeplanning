@@ -1,16 +1,15 @@
-// In pathfinding_test.go
-
-package pathfinding
+package ch
 
 import (
 	"container/heap"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
-	collection "github.com/PaulMue0/efficient-routeplanning/Collection"
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
-	parser "github.com/PaulMue0/efficient-routeplanning/Parser"
+	parser "github.com/PaulMue0/efficient-routeplanning/internal/parser"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
+	collection "github.com/PaulMue0/efficient-routeplanning/pkg/collection/heap_gen"
 )
 
 // --- Test Helper Functions ---
@@ -288,6 +287,107 @@ func TestInsertInUpwardsOrDownwardsGraph(t *testing.T) {
 	})
 }
 
+func TestQuery(t *testing.T) {
+	// Use a copy of the graph for preprocessing because it gets modified.
+	gForPreprocess := createGraphFromSlidedeck()
+	ch := NewContractionHierarchies()
+	ch.Preprocess(gForPreprocess)
+
+	t.Run("Path 4 to 5", func(t *testing.T) {
+		source := graph.VertexId(4)
+		target := graph.VertexId(5)
+		expectedWeight := 8.0
+		expectedPath1 := []graph.VertexId{4, 1, 5}
+		expectedPath2 := []graph.VertexId{4, 6, 5}
+
+		path, weight, err := ch.Query(source, target)
+		if err != nil {
+			t.Fatalf("Query failed: %v", err)
+		}
+
+		if weight != expectedWeight {
+			t.Errorf("got weight %f, want %f", weight, expectedWeight)
+		}
+
+		if !reflect.DeepEqual(path, expectedPath1) && !reflect.DeepEqual(path, expectedPath2) {
+			t.Errorf("got path %v, want %v or %v", path, expectedPath1, expectedPath2)
+		}
+	})
+
+	t.Run("Path 0 to 6", func(t *testing.T) {
+		source := graph.VertexId(0)
+		target := graph.VertexId(6)
+		expectedWeight := 9.0
+		expectedPath := []graph.VertexId{0, 1, 5, 6}
+
+		path, weight, err := ch.Query(source, target)
+		if err != nil {
+			t.Fatalf("Query failed: %v", err)
+		}
+
+		if weight != expectedWeight {
+			t.Errorf("got weight %f, want %f", weight, expectedWeight)
+		}
+
+		if !reflect.DeepEqual(path, expectedPath) {
+			t.Errorf("got path %v, want %v", path, expectedPath)
+		}
+	})
+
+	t.Run("Path to self", func(t *testing.T) {
+		source := graph.VertexId(3)
+		target := graph.VertexId(3)
+		expectedWeight := 0.0
+		expectedPath := []graph.VertexId{3}
+
+		path, weight, err := ch.Query(source, target)
+		if err != nil {
+			t.Fatalf("Query failed: %v", err)
+		}
+
+		if weight != expectedWeight {
+			t.Errorf("got weight %f, want %f", weight, expectedWeight)
+		}
+
+		if !reflect.DeepEqual(path, expectedPath) {
+			t.Errorf("got path %v, want %v", path, expectedPath)
+		}
+	})
+}
+
+func TestQueryWithSpecificContractionOrder(t *testing.T) {
+	gForPreprocess := createGraphFromSlidedeck()
+	ch := NewContractionHierarchies()
+
+	specificOrder := []graph.VertexId{6, 2, 3, 5, 0, 7, 1, 4}
+
+	for _, vId := range specificOrder {
+		if _, ok := gForPreprocess.Vertices[vId]; ok {
+			ch.Contract(gForPreprocess, vId)
+		}
+	}
+
+	t.Run("Path 0 to 6 with specific contraction order", func(t *testing.T) {
+		source := graph.VertexId(0)
+		target := graph.VertexId(6)
+		expectedWeight := 9.0
+		expectedPath := []graph.VertexId{0, 1, 5, 6}
+
+		path, weight, err := ch.Query(source, target)
+		if err != nil {
+			t.Fatalf("Query failed: %v", err)
+		}
+
+		if weight != expectedWeight {
+			t.Errorf("got weight %f, want %f", weight, expectedWeight)
+		}
+
+		if !reflect.DeepEqual(path, expectedPath) {
+			t.Errorf("got path %v, want %v", path, expectedPath)
+		}
+	})
+}
+
 func BenchmarkOsm1(b *testing.B) {
 	for b.Loop() {
 		name := "osm1.txt"
@@ -303,3 +403,4 @@ func BenchmarkOsm1(b *testing.B) {
 
 	}
 }
+

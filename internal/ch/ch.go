@@ -1,12 +1,13 @@
-package pathfinding
+package ch
 
 import (
 	"container/heap"
 	"fmt"
 	"slices"
 
-	collection "github.com/PaulMue0/efficient-routeplanning/Collection"
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	pathfinding "github.com/PaulMue0/efficient-routeplanning/internal/pathfinding"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
+	collection "github.com/PaulMue0/efficient-routeplanning/pkg/collection/heap_gen"
 )
 
 type ContractionHierarchies struct {
@@ -110,14 +111,14 @@ func Shortcuts(g *graph.Graph, v graph.VertexId, insertFlag bool) int {
 			costViaV := float64(incidentEdges[u.Id].Weight) + float64(incidentEdges[w.Id].Weight)
 
 			// Check if the path u->v->w is a shortest path. Bound the search by `costViaV`.
-			_, shortestPathCost, _ := DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */)
+			_, shortestPathCost, _ := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */)
 			if shortestPathCost < costViaV {
 				continue // Path u->v->w is not a shortest path, so we ignore it.
 			}
 
 			// Check for an alternative path of the same length, ignoring v.
 			// This search is also bounded by `costViaV`.
-			_, _, err := DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */, v /* ignored */)
+			_, _, err := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */, v /* ignored */)
 			// A shortcut is needed only if the witness search fails to find a path within the bound.
 			if err != nil {
 				shortcutsFound++
@@ -156,3 +157,80 @@ func EdgeDifference(g *graph.Graph, v graph.VertexId) int {
 	shortcuts := Shortcuts(g, v, false)
 	return shortcuts - degree
 }
+
+// Query finds the shortest path between source and target using the CH.
+// It performs a bidirectional Dijkstra search on the CH and then unpacks
+// the resulting path to resolve any shortcuts.
+func (c *ContractionHierarchies) Query(source, target graph.VertexId) ([]graph.VertexId, float64, error) {
+	path, weight, err := pathfinding.BiDirectionalDijkstraShortestPath(c.UpwardsGraph, c.DownwardsGraph, source, target)
+	if err != nil {
+		return nil, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
+	}
+
+	if len(path) == 0 {
+		return []graph.VertexId{}, weight, nil
+	}
+
+	unpackedPath, err := c.unpackPath(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to unpack path: %w", err)
+	}
+
+	return unpackedPath, weight, nil
+}
+
+func (c *ContractionHierarchies) unpackPath(path []graph.VertexId) ([]graph.VertexId, error) {
+	if len(path) < 2 {
+		return path, nil
+	}
+
+	fullPath := []graph.VertexId{path[0]}
+
+	for i := 0; i < len(path)-1; i++ {
+		u, v := path[i], path[i+1]
+		segment, err := c.unpackEdge(u, v)
+		if err != nil {
+			return nil, err
+		}
+		fullPath = append(fullPath, segment[1:]...)
+	}
+
+	return fullPath, nil
+}
+
+// unpackEdge recursively unpacks a single edge (u, v).
+// If the edge is a shortcut, it finds the intermediate node and recursively
+// unpacks the two new segments.
+func (c *ContractionHierarchies) unpackEdge(u, v graph.VertexId) ([]graph.VertexId, error) {
+	var edge graph.Edge
+	var ok bool
+
+	// The edge must exist in either the upwards or downwards graph.
+	edge, ok = c.UpwardsGraph.Edges[u][v]
+	if !ok {
+		edge, ok = c.DownwardsGraph.Edges[u][v]
+		if !ok {
+			return nil, fmt.Errorf("no edge found between %d and %d in CH graphs", u, v)
+		}
+	}
+
+	if !edge.IsShortcut {
+		return []graph.VertexId{u, v}, nil
+	}
+
+	via := edge.Via
+	path1, err := c.unpackEdge(u, via)
+	if err != nil {
+		return nil, err
+	}
+	path2, err := c.unpackEdge(via, v)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combine the two unpacked sub-paths.
+	// path1 is [u, ..., via], path2 is [via, ..., v].
+	// append path2[1:] to path1 to get [u, ..., via, ..., v].
+	return append(path1, path2[1:]...), nil
+}
+

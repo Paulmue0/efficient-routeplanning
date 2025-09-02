@@ -1,2 +1,7 @@
 *json
 *.dot
+*.txt
+*.metis
+*.ordering
+/KaHIP
+.DS_Store

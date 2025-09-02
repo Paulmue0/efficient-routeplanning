@@ -1,4 +1,4 @@
-package parser_test
+package parser
 
 import (
 	"maps"
@@ -6,8 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
-	parser "github.com/PaulMue0/efficient-routeplanning/Parser"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -50,7 +49,7 @@ func TestNewRoadNetwork(t *testing.T) {
 	}
 
 	name := slices.Collect(maps.Keys(fs))[0]
-	got, err := parser.NewNetworkFromFS(fs, name)
+	got, err := NewNetworkFromFS(fs, name)
 	want := mockRoadNetwork
 
 	assertRoadNetwork(t, got, want)

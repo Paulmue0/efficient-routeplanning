@@ -1,4 +1,4 @@
-package graph
+package collection
 
 // Add these structs to your graph package
 import "encoding/json"

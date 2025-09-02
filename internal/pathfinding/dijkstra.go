@@ -5,8 +5,8 @@ import (
 	"errors"
 	"math"
 
-	collection "github.com/PaulMue0/efficient-routeplanning/Collection"
-	graph "github.com/PaulMue0/efficient-routeplanning/Graph"
+	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
+	collection "github.com/PaulMue0/efficient-routeplanning/pkg/collection/heap_gen"
 )
 
 var ErrTargetNotReachable = errors.New("target vertex not reachable from source")
@@ -61,7 +61,7 @@ func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId, bound f
 
 func initializeWeights(g *graph.Graph, source graph.VertexId) map[graph.VertexId]float64 {
 	weights := make(map[graph.VertexId]float64)
-	for vertex := range g.Edges {
+	for vertex := range g.Vertices {
 		if vertex == source {
 			weights[vertex] = 0
 		} else {

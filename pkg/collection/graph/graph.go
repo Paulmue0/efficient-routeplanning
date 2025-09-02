@@ -1,4 +1,4 @@
-package graph
+package collection
 
 import (
 	"errors"
@@ -128,14 +128,11 @@ func (g *Graph) UpdateEdge(x, y VertexId, weight int, shortcut bool, via VertexI
 		return ErrEdgeNotFound
 	}
 
-	existingEdge, exists := g.Edges[x][y]
-	if !exists {
+	if _, exists := g.Edges[x][y]; !exists {
 		return ErrEdgeNotFound // Cannot update an edge that does not exist.
 	}
 
-	if weight < existingEdge.Weight {
-		g.Edges[x][y] = Edge{Target: y, Weight: weight, IsShortcut: shortcut, Via: via}
-	}
+	g.Edges[x][y] = Edge{Target: y, Weight: weight, IsShortcut: shortcut, Via: via}
 
 	return nil
 }
@@ -240,4 +237,12 @@ func (g *Graph) UpdateVertex(id VertexId, v Vertex) error {
 	}
 	g.Vertices[id] = v
 	return nil
+}
+
+func (g *Graph) NumEdges() int {
+	count := 0
+	for _, targets := range g.Edges {
+		count += len(targets)
+	}
+	return count
 }
