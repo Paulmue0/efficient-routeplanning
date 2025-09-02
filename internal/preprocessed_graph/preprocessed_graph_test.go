@@ -16,7 +16,7 @@ import (
 func TestWriteAndReadCCH(t *testing.T) {
 	// 1. Setup: Preprocess the example graph
 	graphPath := "data/RoadNetworks/example.txt"
-	orderingPath := "../../data/KaHIP/example.ordering.txt"
+	orderingPath := "../../data/KaHIP/example.ordering"
 
 	// The parser needs a relative path from the project root, but the test runs in the module dir.
 	// So we construct the path relative to the test execution directory.

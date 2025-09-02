@@ -1,8 +1,8 @@
 package parser
 
 import (
+	"bytes"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
@@ -20,11 +20,11 @@ func TestToJSON(t *testing.T) {
 	}
 
 	// After sorting, nodes should be [0, 1]
-	expected := `{"nodes":[{"Id":0,"Lat":1,"Lon":2},{"Id":1,"Lat":3,"Lon":4}],"links":[{"source":0,"target":1,"weight":100,"is_shortcut":false}]}`
+	expected := `{"nodes":[{"Id":0,"Lat":1,"Lon":2},{"Id":1,"Lat":3,"Lon":4}],"links":[{"source":0,"target":1,"weight":100,"is_shortcut":false, "via":-1}]}`
 
 	// Normalize JSON strings to avoid issues with whitespace and formatting.
 	norm := func(s string) string {
-		var out strings.Builder
+		var out bytes.Buffer // Use bytes.Buffer
 		json.Compact(&out, []byte(s))
 		return out.String()
 	}

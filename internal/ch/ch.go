@@ -179,7 +179,6 @@ func (c *ContractionHierarchies) Query(source, target graph.VertexId) ([]graph.V
 	return unpackedPath, weight, nil
 }
 
-// unpackPath takes a path containing shortcuts and expands them into the original edges.
 func (c *ContractionHierarchies) unpackPath(path []graph.VertexId) ([]graph.VertexId, error) {
 	if len(path) < 2 {
 		return path, nil
@@ -193,7 +192,6 @@ func (c *ContractionHierarchies) unpackPath(path []graph.VertexId) ([]graph.Vert
 		if err != nil {
 			return nil, err
 		}
-		// Append the unpacked segment, skipping the first node to avoid duplication.
 		fullPath = append(fullPath, segment[1:]...)
 	}
 
@@ -232,6 +230,7 @@ func (c *ContractionHierarchies) unpackEdge(u, v graph.VertexId) ([]graph.Vertex
 
 	// Combine the two unpacked sub-paths.
 	// path1 is [u, ..., via], path2 is [via, ..., v].
-	// We append path2[1:] to path1 to get [u, ..., via, ..., v].
+	// append path2[1:] to path1 to get [u, ..., via, ..., v].
 	return append(path1, path2[1:]...), nil
 }
+

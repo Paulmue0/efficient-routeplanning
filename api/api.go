@@ -21,7 +21,7 @@ var (
 
 func loadAndPreprocess() {
 	name := "osm1.txt"
-	dataDir := "data/RoadNetworks"
+	dataDir := "../../data/RoadNetworks"
 	fileSystem := os.DirFS(dataDir)
 	network, err := parser.NewNetworkFromFS(fileSystem, name)
 	if err != nil {
@@ -33,7 +33,7 @@ func loadAndPreprocess() {
 	cchInst := cch.NewCCH()
 	log.Println("Starting CCH preprocessing...")
 	start := time.Now()
-	err = cchInst.Preprocess(network.Network, "osm1.ordering")
+	err = cchInst.Preprocess(network.Network, "../../data/kaHIP/osm1.ordering")
 	if err != nil {
 		log.Fatalf("CCH preprocessing failed: %v", err)
 	}
@@ -51,7 +51,7 @@ func loadAndPreprocess() {
 	log.Println("Starting CH preprocessing...")
 	start = time.Now()
 	chInst.Preprocess(network.Network)
-	duration := time.Since(start)
+	duration = time.Since(start)
 	log.Printf("Finished CH preprocessing in %s", duration)
 	chInstance = chInst
 }
@@ -88,8 +88,7 @@ type QueryResponse struct {
 func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
-    log.Printf("CCH query: from=%s, to=%s", fromStr, toStr)
-
+	log.Printf("CCH query: from=%s, to=%s", fromStr, toStr)
 
 	from, err := strconv.Atoi(fromStr)
 	if err != nil {
@@ -103,12 +102,12 @@ func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    if cchInstance == nil {
-        log.Println("cchInstance is nil")
-        http.Error(w, "CCH not initialized", http.StatusInternalServerError)
-        return
-    }
-    log.Printf("cchInstance is not nil, UpwardsGraph has %d vertices", len(cchInstance.UpwardsGraph.Vertices))
+	if cchInstance == nil {
+		log.Println("cchInstance is nil")
+		http.Error(w, "CCH not initialized", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("cchInstance is not nil, UpwardsGraph has %d vertices", len(cchInstance.UpwardsGraph.Vertices))
 
 	path, weight, err := cchInstance.Query(graph.VertexId(from), graph.VertexId(to))
 	if err != nil {
@@ -137,7 +136,7 @@ func chQueryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path, weight, err := chInstance.Query(.VertexId(from), graph.VertexId(to))
+	path, weight, err := chInstance.Query(graph.VertexId(from), graph.VertexId(to))
 	if err != nil {
 		http.Error(w, "Query failed", http.StatusInternalServerError)
 		log.Printf("CH query failed: %v", err)
