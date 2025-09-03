@@ -14,6 +14,7 @@
     "@deck.gl/geo-layers": "^9.1.14",
     "@deck.gl/layers": "^9.1.14",
     "@deck.gl/mapbox": "^9.1.14",
+    "@turf/turf": "^7.2.0",
     "@vue-deckgl-suite/layers": "^1.0.0-beta.4",
     "@vue-deckgl-suite/maplibre": "^1.0.0-beta.4",
     "maplibre-gl": "^5.7.0",

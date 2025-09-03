@@ -1,9 +1,8 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { DeckGL, Map as MapComponent } from '@vue-deckgl-suite/maplibre';
-import { GeoJsonLayer } from '@vue-deckgl-suite/layers';
+import GraphVisualization from './components/GraphVisualization.vue';
+import RouteSelector from './components/RouteSelector.vue';
 
-const style = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 const geoJsonData = ref(null);
 const startNode = ref(null);
 const endNode = ref(null);
@@ -21,16 +20,8 @@ const viewState = ref({
   bearing: 0
 });
 
-const onViewStateChange = ({ viewState: newViewState }) => {
+const handleViewStateChange = (newViewState) => {
   viewState.value = newViewState;
-};
-
-const getTooltip = ({ object }) => {
-  if (!object || !object.properties) return null;
-  const { type, id, source, target } = object.properties;
-  if (type === 'vertex') return `Vertex: ${id}`;
-  if (type === 'edge') return `Edge: ${source} -> ${target}`;
-  return null;
 };
 
 const handleLayerClick = (info) => {
@@ -105,47 +96,6 @@ watch(selectedAlgorithm, () => {
   queryTimeMs.value = null;
 });
 
-const getFillColor = (feature) => {
-  const vertexId = feature.properties.id;
-  if (vertexId === startNode.value) return [0, 255, 0, 255]; // Green
-  if (vertexId === endNode.value) return [255, 0, 255, 255]; // Magenta
-  return [255, 255, 255, 200]; // White
-};
-
-const getPointRadius = (feature) => {
-  const vertexId = feature.properties.id;
-  if (vertexId === startNode.value || vertexId === endNode.value) {
-    return 20; // Larger radius for selected nodes
-  }
-  return 5; // Default radius
-};
-
-const getLineColor = (feature) => {
-  if (feature.properties.type === 'edge') {
-    return feature.properties.graph === 'upwards' ? [255, 0, 0, 255] : [0, 0, 255, 255];
-  }
-  if (feature.properties.type === 'vertex') {
-    const vertexId = feature.properties.id;
-    if (vertexId === startNode.value || vertexId === endNode.value) {
-      return [0, 0, 0, 255]; // Black stroke for selected vertices
-    }
-  }
-  return [0, 0, 0, 0]; // Transparent for other cases (non-selected vertices, or if no stroke desired)
-};
-
-const getLineWidth = (feature) => {
-  if (feature.properties.type === 'edge') {
-    return 2; // Default width for edges
-  }
-  if (feature.properties.type === 'vertex') {
-    const vertexId = feature.properties.id;
-    if (vertexId === startNode.value || vertexId === endNode.value) {
-      return 4; // Thicker stroke for selected vertices
-    }
-  }
-  return 0; // No stroke for non-selected vertices (or default to 0 if not explicitly handled)
-};
-
 onMounted(async () => {
   try {
     const response = await fetch('/api/ch');
@@ -200,16 +150,24 @@ onMounted(async () => {
 </script>
 
 <template>
-  <DeckGL :get-tooltip="getTooltip" :view-state="viewState" @view-state-change="onViewStateChange">
-    <MapComponent height="100vh" :style :center="[viewState.longitude, viewState.latitude]" :zoom="viewState.zoom" />
-    <GeoJsonLayer v-if="geoJsonData" id="graph-layer" :data="geoJsonData" pointType="circle" :filled="true"
-      :stroked="true" :pickable="true" :getFillColor="getFillColor" :getLineColor="getLineColor"
-      @click="handleLayerClick" :getLineWidth="getLineWidth" lineWidthUnits="pixels" :getPointRadius="getPointRadius"
-      pointRadiusUnits="pixels"
-      :update-triggers="{ getFillColor: [startNode, endNode], getPointRadius: [startNode, endNode], getLineColor: [startNode, endNode], getLineWidth: [startNode, endNode] }" />
-    <GeoJsonLayer v-if="shortestPath" id="shortest-path-layer" :data="shortestPath" :getLineColor="[0, 255, 0, 255]"
-      :getLineWidth="5" lineWidthUnits="pixels" />
-  </DeckGL>
+  <GraphVisualization
+    :geo-json-data="geoJsonData"
+    :shortest-path="shortestPath"
+    :start-node="startNode"
+    :end-node="endNode"
+    :vertices-map="verticesMap"
+    :selected-algorithm="selectedAlgorithm"
+    :view-state="viewState"
+    @update:view-state="handleViewStateChange"
+    @layer-click="handleLayerClick"
+  />
+  <RouteSelector
+    :geo-json-data="geoJsonData"
+    :start-node="startNode"
+    :end-node="endNode"
+    @update:start-node="startNode = $event"
+    @update:end-node="endNode = $event"
+  />
   <div class="info-overlay">
     <div class="algorithm-selector">
       <label for="algorithm-select">Algorithm:</label>
