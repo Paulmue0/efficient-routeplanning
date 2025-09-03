@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	experiment := flag.String("experiment", "ch", "The experiment to run (ch, query or cch_preprocess)")
+	experiment := flag.String("experiment", "ch", "The experiment to run (ch, query, cch_preprocess, cch_customization or cch_query)")
 	flag.Parse()
 
 	switch *experiment {
@@ -20,8 +20,12 @@ func main() {
 		experiments.RunQueryExperiment()
 	case "cch_preprocess":
 		experiments.RunCCHPreprocessExperiment()
+	case "cch_customization":
+		experiments.RunCCHCustomizationExperiment()
+	case "cch_query":
+		experiments.RunCCHQueryExperiment()
 	default:
-		fmt.Println("Invalid experiment specified. Use 'ch', 'query' or 'cch_preprocess'.")
+		fmt.Println("Invalid experiment specified. Use 'ch', 'query', 'cch_preprocess', 'cch_customization' or 'cch_query'.")
 		os.Exit(1)
 	}
 }

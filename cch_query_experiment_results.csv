@@ -1,0 +1,5 @@
+Graph,AvgDijkstraTime(ms),AvgCCHQueryTime(ms),Mismatches
+osm1.txt,0.239,0.232,0
+osm2.txt,0.255,0.252,0
+osm3.txt,0.558,0.459,0
+osm4.txt,1.264,0.992,0
