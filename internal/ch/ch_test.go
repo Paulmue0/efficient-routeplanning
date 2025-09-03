@@ -88,6 +88,7 @@ func assertIsPermutation(t *testing.T, got []graph.VertexId, originalVertices ma
 
 func TestNumShortcuts(t *testing.T) {
 	g := createGraphFromSlidedeck()
+	ch := NewContractionHierarchies()
 
 	shortcutTests := []struct {
 		vId   graph.VertexId
@@ -105,7 +106,7 @@ func TestNumShortcuts(t *testing.T) {
 
 	for _, tt := range shortcutTests {
 		t.Run(string(rune(tt.vId)), func(t *testing.T) {
-			got := Shortcuts(g, tt.vId, false)
+			got := ch.Shortcuts(g, tt.vId, false)
 			if int(tt.wants) != got {
 				t.Errorf("got %v, want one of %v", got, tt.wants)
 			}
@@ -115,6 +116,7 @@ func TestNumShortcuts(t *testing.T) {
 
 func TestEdgeDifference(t *testing.T) {
 	g := createGraphFromSlidedeck()
+	ch := NewContractionHierarchies()
 
 	edTests := []struct {
 		name  string
@@ -133,7 +135,7 @@ func TestEdgeDifference(t *testing.T) {
 
 	for _, tt := range edTests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := EdgeDifference(g, tt.vId)
+			got := ch.EdgeDifference(g, tt.vId)
 			if int(tt.wants) != got {
 				t.Errorf("got %v, want one of %v", got, tt.wants)
 			}
@@ -149,7 +151,7 @@ func TestPreprocess(t *testing.T) {
 	}
 
 	ch := NewContractionHierarchies()
-	ch.Preprocess(g)
+	ch.Preprocess(g, 4)
 
 	assertIsPermutation(t, ch.ContractionOrder, originalVertices)
 }
@@ -291,7 +293,7 @@ func TestQuery(t *testing.T) {
 	// Use a copy of the graph for preprocessing because it gets modified.
 	gForPreprocess := createGraphFromSlidedeck()
 	ch := NewContractionHierarchies()
-	ch.Preprocess(gForPreprocess)
+	ch.Preprocess(gForPreprocess, 4)
 
 	t.Run("Path 4 to 5", func(t *testing.T) {
 		source := graph.VertexId(4)
@@ -300,7 +302,7 @@ func TestQuery(t *testing.T) {
 		expectedPath1 := []graph.VertexId{4, 1, 5}
 		expectedPath2 := []graph.VertexId{4, 6, 5}
 
-		path, weight, err := ch.Query(source, target)
+		path, weight, _, err := ch.Query(source, target)
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
 		}
@@ -320,7 +322,7 @@ func TestQuery(t *testing.T) {
 		expectedWeight := 9.0
 		expectedPath := []graph.VertexId{0, 1, 5, 6}
 
-		path, weight, err := ch.Query(source, target)
+		path, weight, _, err := ch.Query(source, target)
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
 		}
@@ -340,7 +342,7 @@ func TestQuery(t *testing.T) {
 		expectedWeight := 0.0
 		expectedPath := []graph.VertexId{3}
 
-		path, weight, err := ch.Query(source, target)
+		path, weight, _, err := ch.Query(source, target)
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
 		}
@@ -373,7 +375,7 @@ func TestQueryWithSpecificContractionOrder(t *testing.T) {
 		expectedWeight := 9.0
 		expectedPath := []graph.VertexId{0, 1, 5, 6}
 
-		path, weight, err := ch.Query(source, target)
+		path, weight, _, err := ch.Query(source, target)
 		if err != nil {
 			t.Fatalf("Query failed: %v", err)
 		}
@@ -389,7 +391,7 @@ func TestQueryWithSpecificContractionOrder(t *testing.T) {
 }
 
 func BenchmarkOsm1(b *testing.B) {
-	for b.Loop() {
+	for i := 0; i < b.N; i++ {
 		name := "osm1.txt"
 		dataDir := "../data/RoadNetworks"
 		fileSystem := os.DirFS(dataDir)
@@ -399,8 +401,7 @@ func BenchmarkOsm1(b *testing.B) {
 		}
 
 		ch := NewContractionHierarchies()
-		ch.Preprocess(network.Network)
+		ch.Preprocess(network.Network, 128)
 
 	}
 }
-

@@ -21,10 +21,13 @@ import graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 //	ContractionOrder  []graph.VertexId
 
 type CCH struct {
-	UpwardsGraph     *graph.Graph
-	DownwardsGraph   *graph.Graph
-	ContractionOrder []graph.VertexId
-	ContractionMap   map[graph.VertexId]int
+	UpwardsGraph      *graph.Graph
+	DownwardsGraph    *graph.Graph
+	ContractionOrder  []graph.VertexId
+	ContractionMap    map[graph.VertexId]int
+	ShortcutsAdded    int
+	TotalTriangles    int
+	MaxTriangles      int
 }
 
 func NewCCH() *CCH {
@@ -33,7 +36,7 @@ func NewCCH() *CCH {
 	co := make([]graph.VertexId, 0)
 	cm := make(map[graph.VertexId]int)
 
-	return &CCH{ug, dg, co, cm}
+	return &CCH{ug, dg, co, cm, 0, 0, 0}
 }
 
 // -------------------- Metric Independent Preprocessing ---------------------------------
