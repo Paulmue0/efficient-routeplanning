@@ -151,7 +151,7 @@ func TestPreprocess(t *testing.T) {
 	}
 
 	ch := NewContractionHierarchies()
-	ch.Preprocess(g, 4)
+	ch.Preprocess(g)
 
 	assertIsPermutation(t, ch.ContractionOrder, originalVertices)
 }
@@ -293,7 +293,7 @@ func TestQuery(t *testing.T) {
 	// Use a copy of the graph for preprocessing because it gets modified.
 	gForPreprocess := createGraphFromSlidedeck()
 	ch := NewContractionHierarchies()
-	ch.Preprocess(gForPreprocess, 4)
+	ch.Preprocess(gForPreprocess)
 
 	t.Run("Path 4 to 5", func(t *testing.T) {
 		source := graph.VertexId(4)
@@ -401,7 +401,7 @@ func BenchmarkOsm1(b *testing.B) {
 		}
 
 		ch := NewContractionHierarchies()
-		ch.Preprocess(network.Network, 128)
+		ch.Preprocess(network.Network)
 
 	}
 }

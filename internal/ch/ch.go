@@ -140,14 +140,26 @@ func (c *ContractionHierarchies) findIndependentSet(g *graph.Graph, batchSize in
 // The process is parallelized by first calculating all necessary shortcuts concurrently.
 // Then, all graph modifications (adding shortcuts, removing vertices) are applied sequentially
 // to maintain data consistency.
-func (c *ContractionHierarchies) contractBatch(g *graph.Graph, vertices []graph.VertexId, neighborsMap map[graph.VertexId][]graph.Vertex) {
+// Protects global counter ShortcutsAdded
+var shortcutsMu sync.Mutex
+
+func (c *ContractionHierarchies) contractBatch(
+	g *graph.Graph,
+	vertices []graph.VertexId,
+	neighborsMap map[graph.VertexId][]graph.Vertex,
+) {
 	type shortcut struct {
 		from, to, via graph.VertexId
 		weight        int
 	}
-	shortcutsToAdd := make(chan shortcut, len(vertices)*5)
-	var wg sync.WaitGroup
 
+	var (
+		wg        sync.WaitGroup
+		mu        sync.Mutex
+		shortcuts []shortcut
+	)
+
+	// --- Phase 1: find shortcuts in parallel ---
 	for _, v := range vertices {
 		wg.Add(1)
 		go func(vertexId graph.VertexId) {
@@ -162,25 +174,35 @@ func (c *ContractionHierarchies) contractBatch(g *graph.Graph, vertices []graph.
 
 					costViaV := float64(incidentEdges[u.Id].Weight) + float64(incidentEdges[w.Id].Weight)
 
+					// Check if existing path beats the shortcut
 					_, shortestPathCost, _, _ := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV)
 					if shortestPathCost < costViaV {
 						continue
 					}
 
+					// If ignoring vertexId breaks connectivity, we need a shortcut
 					_, _, _, err := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV, vertexId)
 					if err != nil {
-						shortcutsToAdd <- shortcut{from: u.Id, to: w.Id, via: vertexId, weight: int(costViaV)}
+						mu.Lock()
+						shortcuts = append(shortcuts, shortcut{
+							from: u.Id, to: w.Id, via: vertexId, weight: int(costViaV),
+						})
+						mu.Unlock()
 					}
 				}
 			}
 		}(v)
 	}
 	wg.Wait()
-	close(shortcutsToAdd)
 
-	for sc := range shortcutsToAdd {
+	// --- Phase 2: apply graph modifications sequentially ---
+	for _, sc := range shortcuts {
 		c.NumShortcutsAdded++
+
+		shortcutsMu.Lock()
 		ShortcutsAdded++
+		shortcutsMu.Unlock()
+
 		cost := sc.weight
 		addErr := g.AddEdge(sc.from, sc.to, cost, true, sc.via)
 		if addErr == graph.ErrEdgeAlreadyExists {
@@ -194,6 +216,7 @@ func (c *ContractionHierarchies) contractBatch(g *graph.Graph, vertices []graph.
 		}
 	}
 
+	// --- Phase 3: contract vertices ---
 	for _, v := range vertices {
 		c.ContractionOrder = append(c.ContractionOrder, v)
 		c.InsertInUpwardsOrDownwardsGraph(g, v)
@@ -325,19 +348,11 @@ func (c *ContractionHierarchies) Shortcuts(g *graph.Graph, v graph.VertexId, ins
 func (c *ContractionHierarchies) Priority(g *graph.Graph, v graph.VertexId) float64 {
 	degree, _ := g.Degree(v)
 	shortcuts := c.Shortcuts(g, v, false)
-	ed := c.EdgeDifference(g, v)
+	ed := shortcuts - degree
 
 	priority := float64(ed) + (float64(shortcuts) / (float64(degree) + 1.0))
 
 	return priority
-}
-
-// EdgeDifference computes the difference between the number of shortcuts that would be added
-// and the number of edges that would be removed if vertex v were contracted.
-func (c *ContractionHierarchies) EdgeDifference(g *graph.Graph, v graph.VertexId) int {
-	degree, _ := g.Degree(v)
-	shortcuts := c.Shortcuts(g, v, false)
-	return shortcuts - degree
 }
 
 // Query finds the shortest path between a source and a target vertex using the preprocessed
@@ -412,3 +427,4 @@ func (c *ContractionHierarchies) unpackEdge(u, v graph.VertexId) ([]graph.Vertex
 
 	return append(path1, path2[1:]...), nil
 }
+

@@ -74,7 +74,7 @@ func TestBiDirectionalDijkstraShortestPath(t *testing.T) {
 				downGraph = g
 			}
 
-			gotPath, gotCost, err := BiDirectionalDijkstraShortestPath(upGraph, downGraph, tt.source, tt.target)
+			gotPath, gotCost, _, err := BiDirectionalDijkstraShortestPath(upGraph, downGraph, tt.source, tt.target)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("got path = %v, want %v", gotPath, tt.wantPath)
