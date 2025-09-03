@@ -1,5 +1,10 @@
 Graph,OriginalCustomizationTime(ms),AvgRandomCustomizationTime(ms)
-osm1.txt,1.175,1.316
-osm2.txt,2.494,2.031
-osm3.txt,3.841,3.049
-osm4.txt,5.920,5.963
+osm1.txt,0.489,0.461
+osm2.txt,1.133,1.107
+osm3.txt,2.548,2.621
+osm4.txt,6.087,6.222
+osm5.txt,13.009,12.897
+osm6.txt,29.359,29.822
+osm7.txt,94.801,95.384
+osm8.txt,232.404,223.195
+osm9.txt,525.414,529.371
