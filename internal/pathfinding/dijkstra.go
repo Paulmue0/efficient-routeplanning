@@ -12,9 +12,17 @@ import (
 var ErrTargetNotReachable = errors.New("target vertex not reachable from source")
 
 func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId, bound float64, ignoredNode ...graph.VertexId) ([]graph.VertexId, float64, int, error) {
-	weights := initializeWeights(g, source)
+	// Only track distances for visited nodes - huge optimization
+	distances := make(map[graph.VertexId]float64)
+	distances[source] = 0
 	bestPredecessors := make(map[graph.VertexId]graph.VertexId)
-	queue := initializePriorityQueue(weights)
+
+	// Only add source to queue initially - major optimization
+	queue := collection.NewPriorityQueue[graph.VertexId]()
+	queue.PushWithPriority(source, 0)
+
+	// Track visited nodes to avoid re-processing
+	visited := make(map[graph.VertexId]bool)
 	nodesPopped := 0
 
 	var nodeToIgnore graph.VertexId
@@ -29,9 +37,15 @@ func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId, bound f
 		vertex := queue.GetValue(item)
 		cost := queue.GetPriority(item)
 
+		// If already visited with better cost, skip
+		if visited[vertex] {
+			continue
+		}
+		visited[vertex] = true
+
 		// If the shortest distance to the current node already exceeds the bound,
 		// we know we can't find a path to the target within the limit.
-		if cost > bound {
+		if cost >= bound {
 			break
 		}
 
@@ -39,26 +53,97 @@ func DijkstraShortestPath(g *graph.Graph, source, target graph.VertexId, bound f
 			continue
 		}
 
-		if math.IsInf(weights[vertex], 1) {
-			break
-		}
 		if vertex == target {
 			path, err := buildPath(bestPredecessors, source, target)
 			if err != nil {
 				return nil, 0, nodesPopped, err
 			}
-			return path, weights[target], nodesPopped, nil
+			return path, distances[target], nodesPopped, nil
 		}
+
 		for adjacent, edge := range g.Edges[vertex] {
-			newWeight := weights[vertex] + float64(edge.Weight)
-			if newWeight < weights[adjacent] {
-				weights[adjacent] = newWeight
+			if ignoreIsSet && adjacent == nodeToIgnore {
+				continue
+			}
+
+			if visited[adjacent] {
+				continue
+			}
+
+			newWeight := cost + float64(edge.Weight)
+
+			// Early pruning - don't explore paths that exceed bound
+			if newWeight >= bound {
+				continue
+			}
+
+			if oldDist, exists := distances[adjacent]; !exists || newWeight < oldDist {
+				distances[adjacent] = newWeight
 				bestPredecessors[adjacent] = vertex
-				queue.UpdatePriority(adjacent, newWeight)
+				queue.PushWithPriority(adjacent, newWeight)
 			}
 		}
 	}
+
 	return nil, 0, nodesPopped, ErrTargetNotReachable
+}
+
+// WitnessSearch is an optimized version for contraction hierarchies
+// Returns true if a witness path exists (path not using ignored node within bound)
+func WitnessSearch(g *graph.Graph, source, target graph.VertexId, bound float64, ignoredNode graph.VertexId) bool {
+	distances := make(map[graph.VertexId]float64)
+	distances[source] = 0
+
+	queue := collection.NewPriorityQueue[graph.VertexId]()
+	queue.PushWithPriority(source, 0)
+
+	visited := make(map[graph.VertexId]bool)
+
+	for queue.Len() > 0 {
+		item := heap.Pop(queue).(*collection.Item[graph.VertexId])
+		vertex := queue.GetValue(item)
+		cost := queue.GetPriority(item)
+
+		if visited[vertex] {
+			continue
+		}
+		visited[vertex] = true
+
+		// Stop if we exceed bound
+		if cost >= bound {
+			return false
+		}
+
+		// Found witness path
+		if vertex == target {
+			return true
+		}
+
+		for adjacent, edge := range g.Edges[vertex] {
+			// Skip ignored node
+			if adjacent == ignoredNode {
+				continue
+			}
+
+			if visited[adjacent] {
+				continue
+			}
+
+			newWeight := cost + float64(edge.Weight)
+
+			// Prune paths that exceed bound
+			if newWeight >= bound {
+				continue
+			}
+
+			if oldDist, exists := distances[adjacent]; !exists || newWeight < oldDist {
+				distances[adjacent] = newWeight
+				queue.PushWithPriority(adjacent, newWeight)
+			}
+		}
+	}
+
+	return false // No witness path found
 }
 
 func initializeWeights(g *graph.Graph, source graph.VertexId) map[graph.VertexId]float64 {
@@ -93,5 +178,6 @@ func buildPath(predecessors map[graph.VertexId]graph.VertexId, source, target gr
 		current = prev
 		path = append([]graph.VertexId{current}, path...)
 	}
+
 	return path, nil
 }

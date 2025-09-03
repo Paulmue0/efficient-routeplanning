@@ -363,7 +363,7 @@ func TestQueryWithSpecificContractionOrder(t *testing.T) {
 
 func BenchmarkOsm1(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		name := "osm4.txt"
+		name := "osm7.txt"
 		dataDir := "../../data/RoadNetworks"
 		fileSystem := os.DirFS(dataDir)
 		network, err := parser.NewNetworkFromFS(fileSystem, name)
