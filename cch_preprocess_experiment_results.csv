@@ -1,0 +1,5 @@
+Graph,PreprocessingTime(ms),ShortcutsAdded,AvgTriangles,MaxTriangles
+osm1.txt,0,446,1.66,36
+osm2.txt,3,1001,1.93,55
+osm3.txt,5,2253,2.38,91
+osm4.txt,11,5504,2.07,55

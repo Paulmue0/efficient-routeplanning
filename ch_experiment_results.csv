@@ -1,0 +1,5 @@
+Graph,PreprocessingTime(ms),ShortcutsAdded
+osm1.txt,279,206
+osm2.txt,1089,466
+osm3.txt,4983,1095
+osm4.txt,27272,2793

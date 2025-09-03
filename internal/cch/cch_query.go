@@ -10,22 +10,22 @@ import (
 // Query finds the shortest path between source and target using the CCH.
 // It performs a bidirectional Dijkstra search on the CCH and then unpacks
 // the resulting path to resolve any shortcuts.
-func (cch *CCH) Query(source, target graph.VertexId) ([]graph.VertexId, float64, error) {
-	path, weight, err := pathfinding.BiDirectionalDijkstraShortestPath(cch.UpwardsGraph, cch.DownwardsGraph, source, target)
+func (cch *CCH) Query(source, target graph.VertexId) ([]graph.VertexId, float64, int, error) {
+	path, weight, nodesPopped, err := pathfinding.BiDirectionalDijkstraShortestPath(cch.UpwardsGraph, cch.DownwardsGraph, source, target)
 	if err != nil {
-		return nil, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
+		return nil, 0, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
 	}
 
 	if len(path) == 0 {
-		return []graph.VertexId{}, weight, nil
+		return []graph.VertexId{}, weight, 0, nil
 	}
 
 	unpackedPath, err := cch.unpackPath(path)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to unpack path: %w", err)
+		return nil, 0, 0, fmt.Errorf("failed to unpack path: %w", err)
 	}
 
-	return unpackedPath, weight, nil
+	return unpackedPath, weight, nodesPopped, nil
 }
 
 // unpackPath takes a path containing shortcuts and expands them into the original edges.

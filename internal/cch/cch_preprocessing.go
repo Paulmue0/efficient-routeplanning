@@ -92,6 +92,13 @@ func (c *CCH) addShortcuts() error {
 			return fmt.Errorf("failed to get up-neighbors for vertex %d: %w", id, err)
 		}
 
+		numNeighbors := len(higherRankedNeighbors)
+		numTriangles := numNeighbors * (numNeighbors - 1) / 2
+		c.TotalTriangles += numTriangles
+		if numTriangles > c.MaxTriangles {
+			c.MaxTriangles = numTriangles
+		}
+
 		// Connect all higher-ranked neighbors to create shortcuts for paths through 'id'.
 		for i := 0; i < len(higherRankedNeighbors); i++ {
 			for j := i + 1; j < len(higherRankedNeighbors); j++ {
@@ -113,6 +120,7 @@ func (c *CCH) addShortcuts() error {
 					return fmt.Errorf("failed to check adjacency between %d and %d: %w", start, end, err)
 				}
 				if !exists {
+					c.ShortcutsAdded++
 					// The weight is set to infinity to be updated later by metric-dependent steps.
 					if err := c.UpwardsGraph.AddEdge(start, end, int(math.Inf(1)), true, id); err != nil {
 						return fmt.Errorf("failed to add shortcut (%d -> %d) to upwards graph: %w", start, end, err)

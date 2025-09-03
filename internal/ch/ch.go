@@ -111,14 +111,14 @@ func Shortcuts(g *graph.Graph, v graph.VertexId, insertFlag bool) int {
 			costViaV := float64(incidentEdges[u.Id].Weight) + float64(incidentEdges[w.Id].Weight)
 
 			// Check if the path u->v->w is a shortest path. Bound the search by `costViaV`.
-			_, shortestPathCost, _ := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */)
+			_, shortestPathCost, _, _ := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */)
 			if shortestPathCost < costViaV {
 				continue // Path u->v->w is not a shortest path, so we ignore it.
 			}
 
 			// Check for an alternative path of the same length, ignoring v.
 			// This search is also bounded by `costViaV`.
-			_, _, err := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */, v /* ignored */)
+			_, _, _, err := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV /* bound */, v /* ignored */)
 			// A shortcut is needed only if the witness search fails to find a path within the bound.
 			if err != nil {
 				shortcutsFound++
@@ -161,22 +161,22 @@ func EdgeDifference(g *graph.Graph, v graph.VertexId) int {
 // Query finds the shortest path between source and target using the CH.
 // It performs a bidirectional Dijkstra search on the CH and then unpacks
 // the resulting path to resolve any shortcuts.
-func (c *ContractionHierarchies) Query(source, target graph.VertexId) ([]graph.VertexId, float64, error) {
-	path, weight, err := pathfinding.BiDirectionalDijkstraShortestPath(c.UpwardsGraph, c.DownwardsGraph, source, target)
+func (c *ContractionHierarchies) Query(source, target graph.VertexId) ([]graph.VertexId, float64, int, error) {
+	path, weight, nodesPopped, err := pathfinding.BiDirectionalDijkstraShortestPath(c.UpwardsGraph, c.DownwardsGraph, source, target)
 	if err != nil {
-		return nil, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
+		return nil, 0, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
 	}
 
 	if len(path) == 0 {
-		return []graph.VertexId{}, weight, nil
+		return []graph.VertexId{}, weight, 0, nil
 	}
 
 	unpackedPath, err := c.unpackPath(path)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to unpack path: %w", err)
+		return nil, 0, 0, fmt.Errorf("failed to unpack path: %w", err)
 	}
 
-	return unpackedPath, weight, nil
+	return unpackedPath, weight, nodesPopped, nil
 }
 
 func (c *ContractionHierarchies) unpackPath(path []graph.VertexId) ([]graph.VertexId, error) {
