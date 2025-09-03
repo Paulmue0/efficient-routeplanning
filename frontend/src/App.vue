@@ -115,9 +115,9 @@ const getFillColor = (feature) => {
 const getPointRadius = (feature) => {
   const vertexId = feature.properties.id;
   if (vertexId === startNode.value || vertexId === endNode.value) {
-    return 8; // Larger radius for selected nodes
+    return 20; // Larger radius for selected nodes
   }
-  return 2; // Default radius
+  return 5; // Default radius
 };
 
 const getLineColor = (feature) => {
@@ -203,8 +203,9 @@ onMounted(async () => {
   <DeckGL :get-tooltip="getTooltip" :view-state="viewState" @view-state-change="onViewStateChange">
     <MapComponent height="100vh" :style :center="[viewState.longitude, viewState.latitude]" :zoom="viewState.zoom" />
     <GeoJsonLayer v-if="geoJsonData" id="graph-layer" :data="geoJsonData" pointType="circle" :filled="true"
-      :stroked="true" :pickable="true" :getFillColor="getFillColor" :getLineColor="getLineColor" @click="handleLayerClick"
-      :getLineWidth="getLineWidth" lineWidthUnits="pixels" :getPointRadius="getPointRadius" pointRadiusUnits="pixels"
+      :stroked="true" :pickable="true" :getFillColor="getFillColor" :getLineColor="getLineColor"
+      @click="handleLayerClick" :getLineWidth="getLineWidth" lineWidthUnits="pixels" :getPointRadius="getPointRadius"
+      pointRadiusUnits="pixels"
       :update-triggers="{ getFillColor: [startNode, endNode], getPointRadius: [startNode, endNode], getLineColor: [startNode, endNode], getLineWidth: [startNode, endNode] }" />
     <GeoJsonLayer v-if="shortestPath" id="shortest-path-layer" :data="shortestPath" :getLineColor="[0, 255, 0, 255]"
       :getLineWidth="5" lineWidthUnits="pixels" />
