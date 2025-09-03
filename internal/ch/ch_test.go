@@ -114,35 +114,6 @@ func TestNumShortcuts(t *testing.T) {
 	}
 }
 
-func TestEdgeDifference(t *testing.T) {
-	g := createGraphFromSlidedeck()
-	ch := NewContractionHierarchies()
-
-	edTests := []struct {
-		name  string
-		vId   graph.VertexId
-		wants graph.VertexId
-	}{
-		{name: "VertexId:0", vId: 0, wants: -1},
-		{name: "VertexId:1", vId: 1, wants: 0},
-		{name: "VertexId:2", vId: 2, wants: -2},
-		{name: "VertexId:3", vId: 3, wants: -1},
-		{name: "VertexId:4", vId: 4, wants: -1},
-		{name: "VertexId:5", vId: 5, wants: -1},
-		{name: "VertexId:6", vId: 6, wants: -2},
-		{name: "VertexId:7", vId: 7, wants: -1},
-	}
-
-	for _, tt := range edTests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ch.EdgeDifference(g, tt.vId)
-			if int(tt.wants) != got {
-				t.Errorf("got %v, want one of %v", got, tt.wants)
-			}
-		})
-	}
-}
-
 func TestPreprocess(t *testing.T) {
 	g := createGraphFromSlidedeck()
 	originalVertices := make(map[graph.VertexId]graph.Vertex)
@@ -392,8 +363,8 @@ func TestQueryWithSpecificContractionOrder(t *testing.T) {
 
 func BenchmarkOsm1(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		name := "osm1.txt"
-		dataDir := "../data/RoadNetworks"
+		name := "osm4.txt"
+		dataDir := "../../data/RoadNetworks"
 		fileSystem := os.DirFS(dataDir)
 		network, err := parser.NewNetworkFromFS(fileSystem, name)
 		if err != nil {

@@ -39,7 +39,7 @@ func NewContractionHierarchies() *ContractionHierarchies {
 // Preprocess prepares the graph for fast queries by contracting vertices in an optimized order.
 // It iteratively finds batches of independent vertices and contracts them in parallel.
 func (c *ContractionHierarchies) Preprocess(g *graph.Graph) {
-	const batchSize = 128 // Default batch size for parallel contraction
+	const batchSize = 128
 	c.InitializePriority(g)
 
 	for len(g.Vertices) > 0 {
@@ -71,12 +71,7 @@ func (c *ContractionHierarchies) Preprocess(g *graph.Graph) {
 
 		c.contractBatch(g, independentSet, neighborsMap)
 
-		for neighborId := range allNeighbors {
-			if _, ok := g.Vertices[neighborId]; ok {
-				newPrio := c.Priority(g, neighborId)
-				c.Priorities.UpdatePriority(neighborId, newPrio)
-			}
-		}
+		c.recomputeBatchNeighborPriorities(g, allNeighbors)
 	}
 }
 
@@ -234,32 +229,69 @@ func (c *ContractionHierarchies) InitializePriority(g *graph.Graph) {
 	}
 }
 
-// UpdatePriorities recalculates the priority of all vertices in the graph in parallel
-// and updates their values in the priority queue.
-func (c *ContractionHierarchies) UpdatePriorities(g *graph.Graph) {
+// recomputeBatchNeighborPriorities recalculates priorities for all neighbors
+// of the contracted batch in parallel and applies updates sequentially.
+func (c *ContractionHierarchies) recomputeBatchNeighborPriorities(
+	g *graph.Graph, allNeighbors map[graph.VertexId]struct{},
+) {
 	var wg sync.WaitGroup
-	newPriorities := make(chan struct {
+	results := make(chan struct {
 		id       graph.VertexId
 		priority float64
-	}, len(g.Vertices))
+	}, len(allNeighbors))
 
-	for _, v := range g.Vertices {
+	for neighborId := range allNeighbors {
+		if _, ok := g.Vertices[neighborId]; !ok {
+			continue // skip already contracted
+		}
 		wg.Add(1)
-		go func(vertex graph.Vertex) {
+		go func(n graph.VertexId) {
 			defer wg.Done()
-			prio := c.Priority(g, vertex.Id)
-			newPriorities <- struct {
+			prio := c.Priority(g, n)
+			results <- struct {
 				id       graph.VertexId
 				priority float64
-			}{id: vertex.Id, priority: prio}
-		}(v)
+			}{id: n, priority: prio}
+		}(neighborId)
 	}
 
 	wg.Wait()
-	close(newPriorities)
+	close(results)
 
-	for p := range newPriorities {
-		c.Priorities.UpdatePriority(p.id, p.priority)
+	for r := range results {
+		c.Priorities.UpdatePriority(r.id, r.priority)
+	}
+}
+
+// recomputeNeighborPriorities recalculates priorities for a set of neighbor vertices
+// in parallel and applies updates to the priority queue sequentially.
+func (c *ContractionHierarchies) recomputeNeighborPriorities(g *graph.Graph, neighbors map[graph.VertexId]struct{}) {
+	var wg sync.WaitGroup
+	results := make(chan struct {
+		id       graph.VertexId
+		priority float64
+	}, len(neighbors))
+
+	for neighborId := range neighbors {
+		if _, ok := g.Vertices[neighborId]; !ok {
+			continue // skip already removed vertices
+		}
+		wg.Add(1)
+		go func(n graph.VertexId) {
+			defer wg.Done()
+			prio := c.Priority(g, n)
+			results <- struct {
+				id       graph.VertexId
+				priority float64
+			}{id: n, priority: prio}
+		}(neighborId)
+	}
+
+	wg.Wait()
+	close(results)
+
+	for r := range results {
+		c.Priorities.UpdatePriority(r.id, r.priority)
 	}
 }
 
@@ -427,4 +459,3 @@ func (c *ContractionHierarchies) unpackEdge(u, v graph.VertexId) ([]graph.Vertex
 
 	return append(path1, path2[1:]...), nil
 }
-

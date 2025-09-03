@@ -2,8 +2,11 @@
 import { ref, onMounted, watch } from 'vue';
 import GraphVisualization from './components/GraphVisualization.vue';
 import RouteSelector from './components/RouteSelector.vue';
+import { updateEdgeWeights } from './services/edgeService';
 
 const geoJsonData = ref(null);
+const shortcutsGeoJsonData = ref(null);
+const baseGeoJsonData = ref(null);
 const startNode = ref(null);
 const endNode = ref(null);
 const shortestPath = ref(null);
@@ -11,6 +14,8 @@ const pathWeight = ref(null);
 const queryTimeMs = ref(null);
 const selectedAlgorithm = ref('ch'); // Default to CH
 const verticesMap = ref(new Map());
+const blockedEdges = ref([]); // New ref to store blocked edges
+const showShortcuts = ref(true); // New ref to control shortcut visibility
 
 const viewState = ref({
   longitude: 9.244557,
@@ -45,6 +50,44 @@ const handleLayerClick = (info) => {
   }
 };
 
+async function handleEdgeClick({ from, to }) {
+  if (selectedAlgorithm.value !== 'cch') {
+    alert('Edge blocking is only available for CCH algorithm.');
+    return;
+  }
+
+  const index = blockedEdges.value.findIndex(edge => edge.from === from && edge.to === to);
+  let weight = "inf"; // Default to blocking
+
+  if (index !== -1) {
+    // Edge is already blocked, unblock it
+    blockedEdges.value.splice(index, 1);
+    // TODO: Get original weight. For now, we'll just remove it from blocked list.
+    // A more robust solution would involve storing original weights or re-fetching the graph.
+    weight = "1"; // Assuming a default unblocked weight for now, or fetch original
+  } else {
+    // Edge is not blocked, block it
+    blockedEdges.value.push({ from, to });
+  }
+
+  try {
+    await updateEdgeWeights([{ from: from, to: to, weight: weight }]);
+    // Re-fetch graph data to update visualization and ensure pathfinding uses new weights
+    await fetchGraphData(selectedAlgorithm.value);
+    // Recalculate shortest path if nodes are selected
+    if (startNode.value && endNode.value) {
+      await calculateShortestPath();
+    }
+  } catch (error) {
+    console.error('Failed to update edge or re-fetch graph:', error);
+    // Revert UI change if backend update fails
+    if (index === -1) {
+      blockedEdges.value.pop();
+    } else {
+      blockedEdges.value.splice(index, 0, { from, to });
+    }
+  }
+}
 
 async function calculateShortestPath() {
   if (!startNode.value || !endNode.value) {
@@ -82,29 +125,70 @@ async function calculateShortestPath() {
   }
 }
 
-watch(endNode, (newValue) => {
-  if (newValue) {
-    calculateShortestPath();
-  }
-});
-
-watch(selectedAlgorithm, () => {
-  startNode.value = null;
-  endNode.value = null;
-  shortestPath.value = null;
-  pathWeight.value = null;
-  queryTimeMs.value = null;
-});
-
-onMounted(async () => {
+async function fetchGraphData(algorithm) {
   try {
-    const response = await fetch('/api/ch');
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const graphData = await response.json();
-    const features = [];
-    const processedVertices = new Set();
+    // Always fetch the base graph
+    const baseGraphResponse = await fetch('/api/graph');
+    if (!baseGraphResponse.ok) throw new Error(`HTTP error! status: ${baseGraphResponse.status}`);
+    const baseGraphDataRaw = await baseGraphResponse.json();
 
-    const processGraph = (graph, graphType) => {
+    const baseFeatures = [];
+    const baseProcessedVertices = new Set();
+
+    const processBaseGraph = (graph) => {
+      if (!graph) return;
+      if (graph.Vertices) {
+        for (const vertexId in graph.Vertices) {
+          const vertex = graph.Vertices[vertexId];
+          if (!baseProcessedVertices.has(vertexId)) {
+            baseFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [vertex.Lon, vertex.Lat] },
+              properties: { id: vertex.Id, type: 'vertex' }
+            });
+            baseProcessedVertices.add(vertexId);
+          }
+        }
+      }
+      if (graph.Edges && graph.Vertices) {
+        for (const sourceId in graph.Edges) {
+          const sourceVertex = graph.Vertices[sourceId];
+          if (!sourceVertex) continue;
+          for (const targetId in graph.Edges[sourceId]) {
+            const targetVertex = graph.Vertices[targetId];
+            if (!targetVertex) continue;
+            baseFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: [[sourceVertex.Lon, sourceVertex.Lat], [targetVertex.Lon, targetVertex.Lat]] },
+              properties: { source: sourceId, target: targetId, type: 'edge', graph: 'base', weight: graph.Edges[sourceId][targetId].Weight }
+            });
+          }
+        }
+      }
+    };
+    processBaseGraph(baseGraphDataRaw);
+    baseGeoJsonData.value = { type: 'FeatureCollection', features: baseFeatures };
+
+    // Now fetch algorithm-specific data
+    let apiUrl = `/api/${algorithm}`;
+    let graphData;
+    const features = [];
+    const shortcutsFeatures = [];
+    const processedVertices = new Set(); // This set is for algorithm-specific graph processing
+
+    if (algorithm === 'dijkstra') {
+      // For Dijkstra, the algorithm-specific graph is the base graph itself
+      graphData = baseGraphDataRaw;
+    } else {
+      const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      graphData = await response.json();
+    }
+
+    // Clear existing verticesMap to avoid stale data for algorithm-specific graph
+    verticesMap.value.clear();
+
+    const processAlgorithmGraph = (graph, graphType) => {
       if (!graph) return;
       if (graph.Vertices) {
         for (const vertexId in graph.Vertices) {
@@ -113,6 +197,9 @@ onMounted(async () => {
             verticesMap.value.set(vertex.Id, [vertex.Lon, vertex.Lat]);
           }
           if (!processedVertices.has(vertexId)) {
+            // Only add vertices if they are not already in the base graph features
+            // This is to avoid duplicate vertices if base graph is also processed here
+            // For now, we'll just add them, assuming base graph handles primary vertex rendering
             features.push({
               type: 'Feature',
               geometry: { type: 'Point', coordinates: [vertex.Lon, vertex.Lat] },
@@ -129,51 +216,76 @@ onMounted(async () => {
           for (const targetId in graph.Edges[sourceId]) {
             const targetVertex = graph.Vertices[targetId];
             if (!targetVertex) continue;
-            features.push({
+            const edgeFeature = {
               type: 'Feature',
               geometry: { type: 'LineString', coordinates: [[sourceVertex.Lon, sourceVertex.Lat], [targetVertex.Lon, targetVertex.Lat]] },
-              properties: { source: sourceId, target: targetId, type: 'edge', graph: graphType }
-            });
+              properties: { source: sourceId, target: targetId, type: 'edge', graph: graphType, isShortcut: graph.Edges[sourceId][targetId].IsShortcut, weight: graph.Edges[sourceId][targetId].Weight }
+            };
+            if (edgeFeature.properties.isShortcut) {
+              shortcutsFeatures.push(edgeFeature);
+            } else {
+              features.push(edgeFeature);
+            }
           }
         }
       }
     };
 
-    processGraph(graphData.UpwardsGraph, 'upwards');
-    processGraph(graphData.DownwardsGraph, 'downwards');
+    // Process algorithm-specific graph data
+    if (algorithm === 'ch') {
+      processAlgorithmGraph(graphData.UpwardsGraph, 'upwards');
+      processAlgorithmGraph(graphData.DownwardsGraph, 'downwards');
+    } else if (algorithm === 'cch') {
+      processAlgorithmGraph(graphData.UpwardsGraph, 'upwards');
+      processAlgorithmGraph(graphData.DownwardsGraph, 'downwards');
+    } else if (algorithm === 'dijkstra') {
+      // For Dijkstra, geoJsonData will be the same as baseGeoJsonData
+      processAlgorithmGraph(graphData, 'base');
+    }
 
     geoJsonData.value = { type: 'FeatureCollection', features: features };
+    shortcutsGeoJsonData.value = { type: 'FeatureCollection', features: shortcutsFeatures };
   } catch (error) {
     console.error('Failed to fetch and parse graph data:', error);
   }
+}
+
+watch(endNode, (newValue) => {
+  if (newValue) {
+    calculateShortestPath();
+  }
+});
+
+watch(selectedAlgorithm, async (newAlgorithm) => {
+  startNode.value = null;
+  endNode.value = null;
+  shortestPath.value = null;
+  pathWeight.value = null;
+  queryTimeMs.value = null;
+  blockedEdges.value = []; // Clear blocked edges when algorithm changes
+  await fetchGraphData(newAlgorithm);
+});
+
+onMounted(async () => {
+  await fetchGraphData(selectedAlgorithm.value);
 });
 </script>
 
 <template>
-  <GraphVisualization
-    :geo-json-data="geoJsonData"
-    :shortest-path="shortestPath"
-    :start-node="startNode"
-    :end-node="endNode"
-    :vertices-map="verticesMap"
-    :selected-algorithm="selectedAlgorithm"
-    :view-state="viewState"
-    @update:view-state="handleViewStateChange"
-    @layer-click="handleLayerClick"
-  />
-  <RouteSelector
-    :geo-json-data="geoJsonData"
-    :start-node="startNode"
-    :end-node="endNode"
-    @update:start-node="startNode = $event"
-    @update:end-node="endNode = $event"
-  />
+  <GraphVisualization :geo-json-data="geoJsonData" :shortest-path="shortestPath" :start-node="startNode"
+    :end-node="endNode" :vertices-map="verticesMap" :selected-algorithm="selectedAlgorithm" :view-state="viewState"
+    :blocked-edges="blockedEdges" :shortcuts-geo-json-data="shortcutsGeoJsonData" :show-shortcuts="showShortcuts"
+    :base-geo-json-data="baseGeoJsonData" @update:view-state="handleViewStateChange" @layer-click="handleLayerClick"
+    @edge-click="handleEdgeClick" />
+  <RouteSelector :geo-json-data="geoJsonData" :start-node="startNode" :end-node="endNode"
+    @update:start-node="startNode = $event" @update:end-node="endNode = $event" />
   <div class="info-overlay">
     <div class="algorithm-selector">
       <label for="algorithm-select">Algorithm:</label>
       <select id="algorithm-select" v-model="selectedAlgorithm">
         <option value="ch">Contraction Hierarchies (CH)</option>
         <option value="cch">Customizable Contraction Hierarchies (CCH)</option>
+        <option value="dijkstra">Dijkstra</option>
       </select>
     </div>
     <p v-if="startNode">Start Node: {{ startNode }}</p>
@@ -182,6 +294,10 @@ onMounted(async () => {
     <p v-if="queryTimeMs">Query Time: {{ queryTimeMs.toFixed(2) }} ms</p>
     <p v-if="startNode && !endNode">Click a vertex to select end node.</p>
     <p v-if="!startNode">Click a vertex to select start node.</p>
+    <div class="layer-toggle">
+      <input type="checkbox" id="show-shortcuts" v-model="showShortcuts">
+      <label for="show-shortcuts">Show Shortcuts</label>
+    </div>
   </div>
 </template>
 

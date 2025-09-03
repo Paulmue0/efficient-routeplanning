@@ -1,0 +1,6 @@
+Graph,OriginalCustomizationTime(ms),AvgRandomCustomizationTime(ms)
+osm1.txt,0.469,0.467
+osm2.txt,1.099,1.120
+osm3.txt,2.614,2.590
+osm4.txt,6.548,6.227
+osm5.txt,13.895,14.236
