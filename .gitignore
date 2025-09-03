@@ -5,3 +5,6 @@
 *.ordering
 /KaHIP
 .DS_Store
+/bak
+/data/*
+*.gob

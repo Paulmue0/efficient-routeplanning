@@ -1,5 +1,0 @@
-Graph,AvgDijkstraTime(ms),AvgCHDijkstraTime(ms),AvgDijkstraNodesPopped,AvgCHNodesPopped,Mismatches
-osm1.txt,0.121,0.119,228,34,0
-osm2.txt,0.285,0.248,550,64,0
-osm3.txt,0.551,0.468,984,81,0
-osm4.txt,1.385,1.037,2713,110,0
