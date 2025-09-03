@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"math"
 
 	"github.com/PaulMue0/efficient-routeplanning/internal/cch"
 	"github.com/PaulMue0/efficient-routeplanning/internal/ch"
@@ -17,6 +18,7 @@ import (
 var (
 	cchInstance *cch.CCH
 	chInstance  *ch.ContractionHierarchies
+	cchNetwork  *graph.Graph
 )
 
 func loadAndPreprocess() {
@@ -29,11 +31,13 @@ func loadAndPreprocess() {
 	}
 	log.Printf("File: %s, NumNodes: %d, NumEdges: %d", name, network.NumNodes, network.NumEdges)
 
+	cchNetwork = network.Network
+
 	// Preprocess CCH
 	cchInst := cch.NewCCH()
 	log.Println("Starting CCH preprocessing...")
 	start := time.Now()
-	err = cchInst.Preprocess(network.Network, "../../data/kaHIP/osm1.ordering")
+	err = cchInst.Preprocess(cchNetwork, "../../data/kaHIP/osm1.ordering")
 	if err != nil {
 		log.Fatalf("CCH preprocessing failed: %v", err)
 	}
@@ -41,7 +45,7 @@ func loadAndPreprocess() {
 	log.Printf("Finished CCH preprocessing in %s", duration)
 	cchInstance = cchInst
 
-	cchInst.Customize(network.Network)
+	cchInst.Customize(cchNetwork)
 
 	// Preprocess CH
 	// Need to reload the network because preprocessing modifies the graph
@@ -51,9 +55,9 @@ func loadAndPreprocess() {
 	}
 	chInst := ch.NewContractionHierarchies()
 	log.Println("Starting CH preprocessing...")
-	start = time.Now()
+	start := time.Now()
 	chInst.Preprocess(network.Network)
-	duration = time.Since(start)
+	duration := time.Since(start)
 	log.Printf("Finished CH preprocessing in %s", duration)
 	chInstance = chInst
 }
@@ -65,6 +69,7 @@ func StartApi() {
 	http.HandleFunc("/api/ch", chHandler)
 	http.HandleFunc("/api/cch/query", cchQueryHandler)
 	http.HandleFunc("/api/ch/query", chQueryHandler)
+	http.HandleFunc("/api/cch/update", cchUpdateHandler)
 
 	log.Println("Starting API server on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -156,4 +161,57 @@ func chQueryHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight, QueryTimeMs: queryTimeMs})
+}
+
+type EdgeUpdate struct {
+	From   graph.VertexId `json:"from"`
+	To     graph.VertexId `json:"to"`
+	Weight string         `json:"weight"` // Changed to string
+}
+
+func cchUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var updates []EdgeUpdate
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if cchNetwork == nil {
+		http.Error(w, "Graph not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	for _, update := range updates {
+		var actualWeight int
+		if update.Weight == "inf" {
+			actualWeight = math.MaxInt // Use Go's max int for infinity
+		} else {
+			parsedWeight, err := strconv.Atoi(update.Weight)
+			if err != nil {
+				log.Printf("Invalid weight format for edge from %d to %d: %v", update.From, update.To, err)
+				continue // Skip this update and continue with others
+			}
+			actualWeight = parsedWeight
+		}
+
+		err := cchNetwork.UpdateEdge(update.From, update.To, actualWeight, false, 0)
+		if err != nil {
+			log.Printf("Failed to update edge from %d to %d: %v", update.From, update.To, err)
+		}
+	}
+
+	if cchInstance == nil {
+		http.Error(w, "CCH not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	cchInstance.Customize(cchNetwork)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(cchInstance)
 }
