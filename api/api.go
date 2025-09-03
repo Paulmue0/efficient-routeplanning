@@ -41,6 +41,8 @@ func loadAndPreprocess() {
 	log.Printf("Finished CCH preprocessing in %s", duration)
 	cchInstance = cchInst
 
+	cchInst.Customize(network.Network)
+
 	// Preprocess CH
 	// Need to reload the network because preprocessing modifies the graph
 	network, err = parser.NewNetworkFromFS(fileSystem, name)
@@ -111,8 +113,8 @@ func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("cchInstance is not nil, UpwardsGraph has %d vertices", len(cchInstance.UpwardsGraph.Vertices))
 
 	start := time.Now() // Start timing
-	path, weight, err := cchInstance.Query(graph.VertexId(from), graph.VertexId(to))
-	duration := time.Since(start) // End timing
+	path, weight, _, err := cchInstance.Query(graph.VertexId(from), graph.VertexId(to))
+	duration := time.Since(start)                        // End timing
 	queryTimeMs := float64(duration.Nanoseconds()) / 1e6 // Convert to milliseconds
 
 	if err != nil {
@@ -142,8 +144,8 @@ func chQueryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now() // Start timing
-	path, weight, err := chInstance.Query(graph.VertexId(from), graph.VertexId(to))
-	duration := time.Since(start) // End timing
+	path, weight, _, err := chInstance.Query(graph.VertexId(from), graph.VertexId(to))
+	duration := time.Since(start)                        // End timing
 	queryTimeMs := float64(duration.Nanoseconds()) / 1e6 // Convert to milliseconds
 
 	if err != nil {
