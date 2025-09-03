@@ -18,7 +18,7 @@ type ContractionHierarchies struct {
 	DownwardsGraph    *graph.Graph
 }
 
-var SCAdded = 0
+var ShortcutsAdded = 0
 
 func NewContractionHierarchies() *ContractionHierarchies {
 	co := make([]graph.VertexId, 0)
@@ -123,7 +123,7 @@ func Shortcuts(g *graph.Graph, v graph.VertexId, insertFlag bool) int {
 			if err != nil {
 				shortcutsFound++
 				if insertFlag {
-					SCAdded++
+					ShortcutsAdded++
 					cost := int(costViaV)
 					addErr := g.AddEdge(u.Id, w.Id, cost, true, v)
 					if addErr == graph.ErrEdgeAlreadyExists {
