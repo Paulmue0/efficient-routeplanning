@@ -8,6 +8,7 @@ const hoverInfo = ref(null);
 const props = defineProps({
   geoJsonData: Object,
   shortestPath: Object,
+  pathShortcuts: Object, // New prop for path shortcuts
   startNode: Number,
   endNode: Number,
   verticesMap: Map,
@@ -98,30 +99,39 @@ const getLineWidth = (feature) => {
   }
   return 0; // No stroke for non-selected vertices (or default to 0 if not explicitly handled)
 };
+const getShortestPathLineColor = (feature) => {
+  // Since shortcuts are now shown as arcs, shortest path layer only shows real edges
+  return [0, 255, 0, 255]; // Green for real path segments
+};
+
+const getShortestPathLineWidth = (feature) => {
+  // Since shortcuts are now shown as arcs, shortest path layer only shows real edges
+  return 5; // Default width for real path segments
+};
 </script>
 
 <template>
-  <DeckGL :get-tooltip="getTooltip" :view-state="props.viewState" @view-state-change="onViewStateChange" @on-hover="hoverInfo = $event">
-    <MapComponent height="100vh" :style :center="[props.viewState.longitude, props.viewState.latitude]" :zoom="props.viewState.zoom" />
-    <GeoJsonLayer v-if="props.baseGeoJsonData" id="graph-layer" :data="props.baseGeoJsonData" pointType="circle" :filled="true"
-      :stroked="true" :pickable="true" :getFillColor="getFillColor" :getLineColor="getLineColor"
+  <DeckGL :get-tooltip="getTooltip" :view-state="props.viewState" @view-state-change="onViewStateChange"
+    @on-hover="hoverInfo = $event">
+    <MapComponent height="100vh" :style :center="[props.viewState.longitude, props.viewState.latitude]"
+      :zoom="props.viewState.zoom" />
+    <GeoJsonLayer v-if="props.baseGeoJsonData" id="graph-layer" :data="props.baseGeoJsonData" pointType="circle"
+      :filled="true" :stroked="true" :pickable="true" :getFillColor="getFillColor" :getLineColor="getLineColor"
       @click="handleLayerClick" :getLineWidth="getLineWidth" lineWidthUnits="pixels" :getPointRadius="getPointRadius"
       pointRadiusUnits="pixels"
       :update-triggers="{ getFillColor: [props.startNode, props.endNode, hoverInfo], getPointRadius: [props.startNode, props.endNode, hoverInfo], getLineColor: [props.startNode, props.endNode, props.blockedEdges], getLineWidth: [props.startNode, props.endNode, props.blockedEdges] }" />
     <ArcLayer
       v-if="(props.selectedAlgorithm === 'ch' || props.selectedAlgorithm === 'cch') && props.shortcutsGeoJsonData && props.showShortcuts"
-      id="shortcuts-arc-layer"
-      :data="props.shortcutsGeoJsonData.features"
-      :getSourcePosition="d => d.geometry.coordinates[0]"
-      :getTargetPosition="d => d.geometry.coordinates[1]"
-      :getSourceColor="[255, 255, 0, 255]"
-      :getTargetColor="[255, 255, 0, 255]"
-      :getWidth="2"
-      widthUnits="pixels"
-      :pickable="false"
-    />
-    <GeoJsonLayer v-if="props.shortestPath" id="shortest-path-layer" :data="props.shortestPath" :getLineColor="[0, 255, 0, 255]"
-      :getLineWidth="5" lineWidthUnits="pixels" />
+      id="shortcuts-arc-layer" :data="props.shortcutsGeoJsonData.features"
+      :getSourcePosition="d => d.geometry.coordinates[0]" :getTargetPosition="d => d.geometry.coordinates[1]"
+      :getSourceColor="[255, 255, 0, 255]" :getTargetColor="[255, 255, 0, 255]" :getWidth="2" widthUnits="pixels"
+      :pickable="false" />
+    <GeoJsonLayer v-if="props.shortestPath" id="shortest-path-layer" :data="props.shortestPath"
+      :getLineColor="getShortestPathLineColor" :getLineWidth="getShortestPathLineWidth" lineWidthUnits="pixels" />
+    <ArcLayer v-if="props.pathShortcuts" id="path-shortcuts-arc-layer" :data="props.pathShortcuts.features"
+      :getSourcePosition="d => d.geometry.coordinates[0]" :getTargetPosition="d => d.geometry.coordinates[1]"
+      :getSourceColor="[255, 165, 0, 255]" :getTargetColor="[255, 165, 0, 255]" :getWidth="4" widthUnits="pixels"
+      :pickable="true" />
   </DeckGL>
 </template>
 

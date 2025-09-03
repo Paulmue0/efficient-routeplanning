@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/PaulMue0/efficient-routeplanning/internal/cch"
@@ -19,14 +20,49 @@ import (
 )
 
 var (
-	cchInstance *cch.CCH
-	chInstance  *ch.ContractionHierarchies
-	cchNetwork  *graph.Graph
+	cchInstance     *cch.CCH
+	chInstance      *ch.ContractionHierarchies
+	cchNetwork      *graph.Graph
+	originalWeights map[edgeKey]int // Store original edge weights
+	mu              sync.RWMutex
 )
+
+type edgeKey struct {
+	from graph.VertexId
+	to   graph.VertexId
+}
+
+// CORS middleware
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next(w, r)
+	}
+}
 
 func graphHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cchNetwork)
+
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if cchNetwork == nil {
+		http.Error(w, "Graph not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(cchNetwork); err != nil {
+		http.Error(w, "Failed to encode graph", http.StatusInternalServerError)
+		log.Printf("Error encoding graph: %v", err)
+	}
 }
 
 func loadAndPreprocess() {
@@ -40,6 +76,14 @@ func loadAndPreprocess() {
 	log.Printf("File: %s, NumNodes: %d, NumEdges: %d", name, network.NumNodes, network.NumEdges)
 
 	cchNetwork = network.Network
+
+	// Store original edge weights
+	originalWeights = make(map[edgeKey]int)
+	for from, edges := range cchNetwork.Edges {
+		for to, edge := range edges {
+			originalWeights[edgeKey{from, to}] = edge.Weight
+		}
+	}
 
 	// Preprocess CCH
 	cchInst := cch.NewCCH()
@@ -56,8 +100,6 @@ func loadAndPreprocess() {
 	cchInst.Customize(cchNetwork)
 
 	// Preprocess CH
-	// Need to reload the network because preprocessing modifies the graph
-	// Try to load preprocessed CH from file
 	chFilePath := "../../data/preprocessed/ch_osm7.gob"
 	log.Printf("Attempting to load preprocessed CH from %s", chFilePath)
 	chFile, err := preprocessed_graph.ReadCHFile(chFilePath)
@@ -83,13 +125,15 @@ func loadAndPreprocess() {
 func StartApi() {
 	loadAndPreprocess()
 
-	http.HandleFunc("/api/cch", cchHandler)
-	http.HandleFunc("/api/ch", chHandler)
-	http.HandleFunc("/api/cch/query", cchQueryHandler)
-	http.HandleFunc("/api/ch/query", chQueryHandler)
-	http.HandleFunc("/api/cch/update", cchUpdateHandler)
-	http.HandleFunc("/api/graph", graphHandler)
-	http.HandleFunc("/api/dijkstra/query", dijkstraQueryHandler)
+	// Apply CORS middleware to all handlers
+	http.HandleFunc("/api/cch", corsMiddleware(cchHandler))
+	http.HandleFunc("/api/ch", corsMiddleware(chHandler))
+	http.HandleFunc("/api/cch/query", corsMiddleware(cchQueryHandler))
+	http.HandleFunc("/api/ch/query", corsMiddleware(chQueryHandler))
+	http.HandleFunc("/api/ch/query/nounpack", corsMiddleware(chQueryNoUnpackHandler))
+	http.HandleFunc("/api/cch/update", corsMiddleware(cchUpdateHandler))
+	http.HandleFunc("/api/graph", corsMiddleware(graphHandler))
+	http.HandleFunc("/api/dijkstra/query", corsMiddleware(dijkstraQueryHandler))
 
 	log.Println("Starting API server on :8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -99,12 +143,30 @@ func StartApi() {
 
 func cchHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cchInstance)
+
+	if cchInstance == nil {
+		http.Error(w, "CCH not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(cchInstance); err != nil {
+		http.Error(w, "Failed to encode CCH instance", http.StatusInternalServerError)
+		log.Printf("Error encoding CCH: %v", err)
+	}
 }
 
 func chHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(chInstance)
+
+	if chInstance == nil {
+		http.Error(w, "CH not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(chInstance); err != nil {
+		http.Error(w, "Failed to encode CH instance", http.StatusInternalServerError)
+		log.Printf("Error encoding CH: %v", err)
+	}
 }
 
 func dijkstraQueryHandler(w http.ResponseWriter, r *http.Request) {
@@ -124,33 +186,53 @@ func dijkstraQueryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cchNetwork == nil { // Dijkstra operates on the base graph
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if cchNetwork == nil {
 		log.Println("cchNetwork is nil")
 		http.Error(w, "Graph not initialized", http.StatusInternalServerError)
 		return
 	}
 
-	start := time.Now() // Start timing
-	// DijkstraShortestPath expects a graph.Graph, source, target, and a bound.
-	// We can use math.MaxFloat64 as the bound for an unbounded search.
+	start := time.Now()
 	path, weight, _, err := pathfinding.DijkstraShortestPath(cchNetwork, graph.VertexId(from), graph.VertexId(to), math.MaxFloat64)
-	duration := time.Since(start)                        // End timing
-	queryTimeMs := float64(duration.Nanoseconds()) / 1e6 // Convert to milliseconds
+	duration := time.Since(start)
+	queryTimeMs := float64(duration.Nanoseconds()) / 1e6
 
 	if err != nil {
-		http.Error(w, "Query failed", http.StatusInternalServerError)
+		http.Error(w, "Query failed: no path found", http.StatusNotFound)
 		log.Printf("Dijkstra query failed: %v", err)
 		return
 	}
 
+	var pathEdges []PathEdge
+	for i := 0; i < len(path)-1; i++ {
+		u := path[i]
+		v := path[i+1]
+		edge, ok := cchNetwork.Edges[u][v]
+		if ok {
+			pathEdges = append(pathEdges, PathEdge{From: u, To: v, Weight: float64(edge.Weight), IsShortcut: false})
+		} else {
+			log.Printf("Warning: No edge found between %d and %d in cchNetwork for Dijkstra", u, v)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight, QueryTimeMs: queryTimeMs})
+	json.NewEncoder(w).Encode(QueryResponse{Path: pathEdges, Weight: weight, QueryTimeMs: queryTimeMs})
+}
+
+type PathEdge struct {
+	From       graph.VertexId `json:"From"`
+	To         graph.VertexId `json:"To"`
+	Weight     float64        `json:"Weight"`
+	IsShortcut bool           `json:"IsShortcut"`
 }
 
 type QueryResponse struct {
-	Path        []graph.VertexId `json:"path"`
-	Weight      float64          `json:"weight"`
-	QueryTimeMs float64          `json:"queryTimeMs"`
+	Path        []PathEdge `json:"path"`
+	Weight      float64    `json:"weight"`
+	QueryTimeMs float64    `json:"queryTimeMs"`
 }
 
 func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
@@ -177,19 +259,36 @@ func cchQueryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("cchInstance is not nil, UpwardsGraph has %d vertices", len(cchInstance.UpwardsGraph.Vertices))
 
-	start := time.Now() // Start timing
+	start := time.Now()
 	path, weight, _, err := cchInstance.Query(graph.VertexId(from), graph.VertexId(to))
-	duration := time.Since(start)                        // End timing
-	queryTimeMs := float64(duration.Nanoseconds()) / 1e6 // Convert to milliseconds
+	duration := time.Since(start)
+	queryTimeMs := float64(duration.Nanoseconds()) / 1e6
 
 	if err != nil {
-		http.Error(w, "Query failed", http.StatusInternalServerError)
+		http.Error(w, "Query failed: no path found", http.StatusNotFound)
 		log.Printf("CCH query failed: %v", err)
 		return
 	}
 
+	var pathEdges []PathEdge
+	for i := 0; i < len(path)-1; i++ {
+		u := path[i]
+		v := path[i+1]
+
+		edge, ok := cchInstance.UpwardsGraph.Edges[u][v]
+		if !ok {
+			edge, ok = cchInstance.DownwardsGraph.Edges[u][v]
+		}
+
+		if ok {
+			pathEdges = append(pathEdges, PathEdge{From: u, To: v, Weight: float64(edge.Weight), IsShortcut: edge.IsShortcut})
+		} else {
+			log.Printf("Warning: No edge found between %d and %d in CCH graphs for unpacked path", u, v)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight, QueryTimeMs: queryTimeMs})
+	json.NewEncoder(w).Encode(QueryResponse{Path: pathEdges, Weight: weight, QueryTimeMs: queryTimeMs})
 }
 
 func chQueryHandler(w http.ResponseWriter, r *http.Request) {
@@ -208,25 +307,100 @@ func chQueryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	start := time.Now() // Start timing
+	if chInstance == nil {
+		http.Error(w, "CH not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	start := time.Now()
 	path, weight, _, err := chInstance.Query(graph.VertexId(from), graph.VertexId(to))
-	duration := time.Since(start)                        // End timing
-	queryTimeMs := float64(duration.Nanoseconds()) / 1e6 // Convert to milliseconds
+	duration := time.Since(start)
+	queryTimeMs := float64(duration.Nanoseconds()) / 1e6
 
 	if err != nil {
-		http.Error(w, "Query failed", http.StatusInternalServerError)
+		http.Error(w, "Query failed: no path found", http.StatusNotFound)
 		log.Printf("CH query failed: %v", err)
 		return
 	}
 
+	var pathEdges []PathEdge
+	for i := 0; i < len(path)-1; i++ {
+		u := path[i]
+		v := path[i+1]
+
+		edge, ok := chInstance.UpwardsGraph.Edges[u][v]
+		if !ok {
+			edge, ok = chInstance.DownwardsGraph.Edges[u][v]
+		}
+
+		if ok {
+			pathEdges = append(pathEdges, PathEdge{From: u, To: v, Weight: float64(edge.Weight), IsShortcut: edge.IsShortcut})
+		} else {
+			log.Printf("Warning: No edge found between %d and %d in CH graphs for unpacked path", u, v)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(QueryResponse{Path: path, Weight: weight, QueryTimeMs: queryTimeMs})
+	json.NewEncoder(w).Encode(QueryResponse{Path: pathEdges, Weight: weight, QueryTimeMs: queryTimeMs})
+}
+
+func chQueryNoUnpackHandler(w http.ResponseWriter, r *http.Request) {
+	fromStr := r.URL.Query().Get("from")
+	toStr := r.URL.Query().Get("to")
+
+	from, err := strconv.Atoi(fromStr)
+	if err != nil {
+		http.Error(w, "Invalid 'from' parameter", http.StatusBadRequest)
+		return
+	}
+
+	to, err := strconv.Atoi(toStr)
+	if err != nil {
+		http.Error(w, "Invalid 'to' parameter", http.StatusBadRequest)
+		return
+	}
+
+	if chInstance == nil {
+		http.Error(w, "CH not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	start := time.Now()
+	path, weight, _, err := chInstance.QueryNoUnpack(graph.VertexId(from), graph.VertexId(to))
+	duration := time.Since(start)
+	queryTimeMs := float64(duration.Nanoseconds()) / 1e6
+
+	if err != nil {
+		http.Error(w, "Query failed: no path found", http.StatusNotFound)
+		log.Printf("CH query failed: %v", err)
+		return
+	}
+
+	var pathEdges []PathEdge
+	for i := 0; i < len(path)-1; i++ {
+		u := path[i]
+		v := path[i+1]
+
+		edge, ok := chInstance.UpwardsGraph.Edges[u][v]
+		if !ok {
+			edge, ok = chInstance.DownwardsGraph.Edges[u][v]
+		}
+
+		if ok {
+			pathEdges = append(pathEdges, PathEdge{From: u, To: v, Weight: float64(edge.Weight), IsShortcut: edge.IsShortcut})
+		} else {
+			log.Printf("Warning: No edge found between %d and %d in CH graphs", u, v)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(QueryResponse{Path: pathEdges, Weight: weight, QueryTimeMs: queryTimeMs})
 }
 
 type EdgeUpdate struct {
 	From   graph.VertexId `json:"from"`
 	To     graph.VertexId `json:"to"`
-	Weight string         `json:"weight"` // Changed to string
+	Weight string         `json:"weight"`
 }
 
 func cchUpdateHandler(w http.ResponseWriter, r *http.Request) {
@@ -250,6 +424,9 @@ func cchUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mu.Lock()
+	defer mu.Unlock()
+
 	if cchNetwork == nil {
 		http.Error(w, "Graph not initialized", http.StatusInternalServerError)
 		return
@@ -257,25 +434,37 @@ func cchUpdateHandler(w http.ResponseWriter, r *http.Request) {
 
 	for _, update := range updates {
 		var actualWeight int
+
+		// Handle blocking/unblocking edges
 		if update.Weight == "inf" {
-			actualWeight = math.MaxInt
+			actualWeight = math.MaxInt32 // Use MaxInt32 to avoid overflow issues
+		} else if update.Weight == "restore" {
+			// Restore original weight
+			key := edgeKey{from: update.From, to: update.To}
+			if origWeight, exists := originalWeights[key]; exists {
+				actualWeight = origWeight
+			} else {
+				log.Printf("Original weight not found for edge %d->%d, using default weight 1", update.From, update.To)
+				actualWeight = 1
+			}
 		} else {
 			parsedWeight, err := strconv.Atoi(update.Weight)
 			if err != nil {
 				log.Printf("Invalid weight format for edge from %d to %d: %v", update.From, update.To, err)
-				continue // Skip this update and continue with others
+				continue
 			}
 			actualWeight = parsedWeight
 		}
 
-		err := cchNetwork.UpdateEdge(update.To, update.From, actualWeight, false, 0)
+		// Update both directions (undirected graph)
+		err := cchNetwork.UpdateEdge(update.From, update.To, actualWeight, false, 0)
 		if err != nil {
 			log.Printf("Failed to update edge from %d to %d: %v", update.From, update.To, err)
 		}
 
-		err = cchNetwork.UpdateEdge(update.From, update.To, actualWeight, false, 0)
+		err = cchNetwork.UpdateEdge(update.To, update.From, actualWeight, false, 0)
 		if err != nil {
-			log.Printf("Failed to update edge from %d to %d: %v", update.From, update.To, err)
+			log.Printf("Failed to update edge from %d to %d: %v", update.To, update.From, err)
 		}
 	}
 
@@ -284,8 +473,9 @@ func cchUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Re-customize CCH with updated weights
 	cchInstance.Customize(cchNetwork)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cchInstance)
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }

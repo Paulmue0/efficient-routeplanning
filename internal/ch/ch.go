@@ -468,6 +468,22 @@ func (c *ContractionHierarchies) Query(source, target graph.VertexId) ([]graph.V
 	return unpackedPath, weight, nodesPopped, nil
 }
 
+// QueryNoUnpack finds the shortest path between a source and a target vertex using the preprocessed
+// contraction hierarchy. It performs a bidirectional Dijkstra search on the upward and downward
+// graphs and returns the resulting path without unpacking any shortcuts.
+func (c *ContractionHierarchies) QueryNoUnpack(source, target graph.VertexId) ([]graph.VertexId, float64, int, error) {
+	path, weight, nodesPopped, err := pathfinding.BiDirectionalDijkstraShortestPath(c.UpwardsGraph, c.DownwardsGraph, source, target)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
+	}
+
+	if len(path) == 0 {
+		return []graph.VertexId{}, weight, 0, nil
+	}
+
+	return path, weight, nodesPopped, nil
+}
+
 // unpackPath reconstructs the full shortest path from a path that may contain shortcuts.
 // It iterates through the path segments and recursively unpacks any shortcut edges.
 func (c *ContractionHierarchies) unpackPath(path []graph.VertexId) ([]graph.VertexId, error) {

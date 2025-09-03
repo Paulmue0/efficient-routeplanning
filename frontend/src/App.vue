@@ -10,6 +10,7 @@ const baseGeoJsonData = ref(null);
 const startNode = ref(null);
 const endNode = ref(null);
 const shortestPath = ref(null);
+const pathShortcuts = ref(null); // New ref for path shortcuts to be shown as arcs
 const pathWeight = ref(null);
 const queryTimeMs = ref(null);
 const selectedAlgorithm = ref('ch'); // Default to CH
@@ -44,6 +45,7 @@ const handleLayerClick = (info) => {
       startNode.value = vertexId;
       endNode.value = null;
       shortestPath.value = null; // Clear previous path
+      pathShortcuts.value = null;
       pathWeight.value = null;
       queryTimeMs.value = null;
     }
@@ -92,34 +94,77 @@ async function handleEdgeClick({ from, to }) {
 async function calculateShortestPath() {
   if (!startNode.value || !endNode.value) {
     shortestPath.value = null;
+    pathShortcuts.value = null;
     pathWeight.value = null;
     queryTimeMs.value = null;
     return;
   }
   try {
-    const apiUrl = `/api/${selectedAlgorithm.value}/query?from=${startNode.value}&to=${endNode.value}`;
+    const apiUrl = `/api/${selectedAlgorithm.value.startsWith('ch-nounpack') ? 'ch/query/nounpack' : selectedAlgorithm.value + '/query'}?from=${startNode.value}&to=${endNode.value}`;
+    console.log('API URL:', apiUrl, 'Algorithm:', selectedAlgorithm.value);
     const response = await fetch(apiUrl);
     if (!response.ok) throw new Error('Failed to fetch shortest path');
     const result = await response.json();
+    console.log('Query result:', result);
     if (result.path && result.path.length > 0) {
-      const pathCoordinates = result.path.map(id => verticesMap.value.get(id)).filter(Boolean);
-      if (pathCoordinates.length > 1) {
-        shortestPath.value = {
-          type: 'Feature',
-          geometry: { type: 'LineString', coordinates: pathCoordinates },
-          properties: {}
-        };
-        pathWeight.value = result.weight;
-        queryTimeMs.value = result.queryTimeMs;
+      const pathFeatures = [];
+      const shortcutFeatures = [];
+      
+      for (const edge of result.path) {
+        console.log('Processing edge:', edge);
+        const fromCoords = verticesMap.value.get(edge.From);
+        const toCoords = verticesMap.value.get(edge.To);
+        console.log('Coordinates:', { from: fromCoords, to: toCoords });
+        if (fromCoords && toCoords) {
+          if (edge.IsShortcut) {
+            console.log('Adding shortcut feature');
+            // Add shortcuts as arc features
+            shortcutFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: [fromCoords, toCoords] },
+              properties: { IsShortcut: true, weight: edge.Weight, from: edge.From, to: edge.To }
+            });
+          } else {
+            console.log('Adding regular path feature');
+            // Add real edges as line features
+            pathFeatures.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: [fromCoords, toCoords] },
+              properties: { IsShortcut: false, weight: edge.Weight }
+            });
+          }
+        }
       }
+
+      shortestPath.value = pathFeatures.length > 0 ? {
+        type: 'FeatureCollection',
+        features: pathFeatures
+      } : null;
+      
+      pathShortcuts.value = shortcutFeatures.length > 0 ? {
+        type: 'FeatureCollection',
+        features: shortcutFeatures
+      } : null;
+      
+      console.log('Final results:', {
+        pathFeatures: pathFeatures.length,
+        shortcutFeatures: shortcutFeatures.length,
+        shortestPath: shortestPath.value,
+        pathShortcuts: pathShortcuts.value
+      });
+      
+      pathWeight.value = result.weight;
+      queryTimeMs.value = result.queryTimeMs;
     } else {
       shortestPath.value = null;
+      pathShortcuts.value = null;
       pathWeight.value = null;
       queryTimeMs.value = null;
     }
   } catch (error) {
     console.error(error);
     shortestPath.value = null;
+    pathShortcuts.value = null;
     pathWeight.value = null;
     queryTimeMs.value = null;
   }
@@ -170,7 +215,12 @@ async function fetchGraphData(algorithm) {
     baseGeoJsonData.value = { type: 'FeatureCollection', features: baseFeatures };
 
     // Now fetch algorithm-specific data
-    let apiUrl = `/api/${algorithm}`;
+    let apiUrl;
+    if (algorithm === 'ch-nounpack') {
+      apiUrl = '/api/ch'; // Always fetch the CH graph for both CH and CH-NoUnpack
+    } else {
+      apiUrl = `/api/${algorithm}`;
+    }
     let graphData;
     const features = [];
     const shortcutsFeatures = [];
@@ -188,11 +238,20 @@ async function fetchGraphData(algorithm) {
     // Clear existing verticesMap to avoid stale data for algorithm-specific graph
     verticesMap.value.clear();
 
+    // First populate vertices map from base graph to ensure all vertices are available
+    if (baseGraphDataRaw && baseGraphDataRaw.Vertices) {
+      for (const vertexId in baseGraphDataRaw.Vertices) {
+        const vertex = baseGraphDataRaw.Vertices[vertexId];
+        verticesMap.value.set(vertex.Id, [vertex.Lon, vertex.Lat]);
+      }
+    }
+
     const processAlgorithmGraph = (graph, graphType) => {
       if (!graph) return;
       if (graph.Vertices) {
         for (const vertexId in graph.Vertices) {
           const vertex = graph.Vertices[vertexId];
+          // Only add if not already in vertices map (to preserve base graph vertices)
           if (!verticesMap.value.has(vertex.Id)) {
             verticesMap.value.set(vertex.Id, [vertex.Lon, vertex.Lat]);
           }
@@ -260,6 +319,7 @@ watch(selectedAlgorithm, async (newAlgorithm) => {
   startNode.value = null;
   endNode.value = null;
   shortestPath.value = null;
+  pathShortcuts.value = null;
   pathWeight.value = null;
   queryTimeMs.value = null;
   blockedEdges.value = []; // Clear blocked edges when algorithm changes
@@ -272,7 +332,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <GraphVisualization :geo-json-data="geoJsonData" :shortest-path="shortestPath" :start-node="startNode"
+  <GraphVisualization :geo-json-data="geoJsonData" :shortest-path="shortestPath" :path-shortcuts="pathShortcuts" :start-node="startNode"
     :end-node="endNode" :vertices-map="verticesMap" :selected-algorithm="selectedAlgorithm" :view-state="viewState"
     :blocked-edges="blockedEdges" :shortcuts-geo-json-data="shortcutsGeoJsonData" :show-shortcuts="showShortcuts"
     :base-geo-json-data="baseGeoJsonData" @update:view-state="handleViewStateChange" @layer-click="handleLayerClick"
@@ -284,6 +344,7 @@ onMounted(async () => {
       <label for="algorithm-select">Algorithm:</label>
       <select id="algorithm-select" v-model="selectedAlgorithm">
         <option value="ch">Contraction Hierarchies (CH)</option>
+        <option value="ch-nounpack">Contraction Hierarchies (CH) - No Unpack</option>
         <option value="cch">Customizable Contraction Hierarchies (CCH)</option>
         <option value="dijkstra">Dijkstra</option>
       </select>
