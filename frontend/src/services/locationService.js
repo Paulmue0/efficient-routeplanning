@@ -1,14 +1,25 @@
 import { geocodeAddress } from './geocodingService';
-import { findClosestPoints } from '../utils/geoUtils';
 
-export async function findClosestVertexToAddress(address, geoJsonData) {
+export async function findClosestVertexToAddress(address, verticesMap) {
   const coords = await geocodeAddress(address);
-  if (coords) {
-    // Find the single closest point (n=1)
-    const closestVertices = findClosestPoints(coords.lon, coords.lat, 1, geoJsonData);
-    if (closestVertices && closestVertices.length > 0) {
-      return closestVertices[0];
+  if (coords && verticesMap) {
+    let closestVertex = null;
+    let minDistance = Infinity;
+    
+    // Iterate through all vertices in the map to find the closest one
+    for (const [vertexId, [lon, lat]] of verticesMap) {
+      const distance = Math.sqrt(Math.pow(coords.lon - lon, 2) + Math.pow(coords.lat - lat, 2));
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestVertex = {
+          properties: {
+            id: parseInt(vertexId)
+          }
+        };
+      }
     }
+    
+    return closestVertex;
   }
   return null; // No coordinates found or no closest vertex
 }

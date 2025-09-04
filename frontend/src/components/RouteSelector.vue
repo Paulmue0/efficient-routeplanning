@@ -4,6 +4,7 @@ import { findClosestVertexToAddress } from '../services/locationService';
 
 const props = defineProps({
   geoJsonData: Object,
+  verticesMap: Map,
   startNode: Number,
   endNode: Number,
 });
@@ -30,7 +31,17 @@ async function handleStartAddressInput() {
     emit('update:startNode', null);
     return;
   }
-  const closestVertex = await findClosestVertexToAddress(startAddress.value, props.geoJsonData);
+  
+  // Check if input is a number (vertex ID)
+  const numericId = parseInt(startAddress.value.trim());
+  if (!isNaN(numericId) && props.verticesMap && props.verticesMap.has(numericId)) {
+    startVertexId.value = numericId;
+    emit('update:startNode', numericId);
+    return;
+  }
+  
+  // Otherwise, treat as address and geocode
+  const closestVertex = await findClosestVertexToAddress(startAddress.value, props.verticesMap);
   if (closestVertex) {
     startVertexId.value = closestVertex.properties.id;
     emit('update:startNode', closestVertex.properties.id);
@@ -47,7 +58,17 @@ async function handleEndAddressInput() {
     emit('update:endNode', null);
     return;
   }
-  const closestVertex = await findClosestVertexToAddress(endAddress.value, props.geoJsonData);
+  
+  // Check if input is a number (vertex ID)
+  const numericId = parseInt(endAddress.value.trim());
+  if (!isNaN(numericId) && props.verticesMap && props.verticesMap.has(numericId)) {
+    endVertexId.value = numericId;
+    emit('update:endNode', numericId);
+    return;
+  }
+  
+  // Otherwise, treat as address and geocode
+  const closestVertex = await findClosestVertexToAddress(endAddress.value, props.verticesMap);
   if (closestVertex) {
     endVertexId.value = closestVertex.properties.id;
     emit('update:endNode', closestVertex.properties.id);
@@ -63,12 +84,12 @@ async function handleEndAddressInput() {
   <div class="route-selector">
     <div class="input-group">
       <label for="start-address">Start:</label>
-      <input type="text" id="start-address" v-model="startAddress" @keyup.enter="handleStartAddressInput" placeholder="Enter start address">
+      <input type="text" id="start-address" v-model="startAddress" @keyup.enter="handleStartAddressInput" placeholder="Enter start address or vertex ID">
       <span v-if="startVertexId !== null"> (ID: {{ startVertexId }})</span>
     </div>
     <div class="input-group">
       <label for="end-address">Destination:</label>
-      <input type="text" id="end-address" v-model="endAddress" @keyup.enter="handleEndAddressInput" placeholder="Enter destination address">
+      <input type="text" id="end-address" v-model="endAddress" @keyup.enter="handleEndAddressInput" placeholder="Enter destination address or vertex ID">
       <span v-if="endVertexId !== null"> (ID: {{ endVertexId }})</span>
     </div>
   </div>

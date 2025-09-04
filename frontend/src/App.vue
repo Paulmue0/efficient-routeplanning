@@ -17,6 +17,10 @@ const selectedAlgorithm = ref('ch'); // Default to CH
 const verticesMap = ref(new Map());
 const blockedEdges = ref([]); // New ref to store blocked edges
 const showShortcuts = ref(true); // New ref to control shortcut visibility
+const showVertices = ref(true); // New ref to control vertex visibility
+const showEdges = ref(true); // New ref to control edge visibility
+const showBaseGraph = ref(false); // New ref to control base graph visibility
+const showCurrentPath = ref(true); // New ref to control current path visibility
 
 const viewState = ref({
   longitude: 9.244557,
@@ -213,6 +217,11 @@ async function fetchGraphData(algorithm) {
     };
     processBaseGraph(baseGraphDataRaw);
     baseGeoJsonData.value = { type: 'FeatureCollection', features: baseFeatures };
+    console.log('Base graph stats:', {
+      vertices: Object.keys(baseGraphDataRaw.Vertices || {}).length,
+      edges: Object.keys(baseGraphDataRaw.Edges || {}).reduce((sum, from) => sum + Object.keys(baseGraphDataRaw.Edges[from] || {}).length, 0),
+      features: baseFeatures.length
+    });
 
     // Now fetch algorithm-specific data
     let apiUrl;
@@ -238,23 +247,13 @@ async function fetchGraphData(algorithm) {
     // Clear existing verticesMap to avoid stale data for algorithm-specific graph
     verticesMap.value.clear();
 
-    // First populate vertices map from base graph to ensure all vertices are available
-    if (baseGraphDataRaw && baseGraphDataRaw.Vertices) {
-      for (const vertexId in baseGraphDataRaw.Vertices) {
-        const vertex = baseGraphDataRaw.Vertices[vertexId];
-        verticesMap.value.set(vertex.Id, [vertex.Lon, vertex.Lat]);
-      }
-    }
-
     const processAlgorithmGraph = (graph, graphType) => {
       if (!graph) return;
       if (graph.Vertices) {
         for (const vertexId in graph.Vertices) {
           const vertex = graph.Vertices[vertexId];
-          // Only add if not already in vertices map (to preserve base graph vertices)
-          if (!verticesMap.value.has(vertex.Id)) {
-            verticesMap.value.set(vertex.Id, [vertex.Lon, vertex.Lat]);
-          }
+          // Add all vertices from algorithm-specific graph to verticesMap
+          verticesMap.value.set(vertex.Id, [vertex.Lon, vertex.Lat]);
           if (!processedVertices.has(vertexId)) {
             // Only add vertices if they are not already in the base graph features
             // This is to avoid duplicate vertices if base graph is also processed here
@@ -291,19 +290,29 @@ async function fetchGraphData(algorithm) {
     };
 
     // Process algorithm-specific graph data
-    if (algorithm === 'ch') {
+    if (algorithm === 'ch' || algorithm === 'ch-nounpack') {
       processAlgorithmGraph(graphData.UpwardsGraph, 'upwards');
       processAlgorithmGraph(graphData.DownwardsGraph, 'downwards');
     } else if (algorithm === 'cch') {
       processAlgorithmGraph(graphData.UpwardsGraph, 'upwards');
       processAlgorithmGraph(graphData.DownwardsGraph, 'downwards');
     } else if (algorithm === 'dijkstra') {
-      // For Dijkstra, geoJsonData will be the same as baseGeoJsonData
+      // For Dijkstra, use the base graph and populate verticesMap from it
       processAlgorithmGraph(graphData, 'base');
     }
 
     geoJsonData.value = { type: 'FeatureCollection', features: features };
     shortcutsGeoJsonData.value = { type: 'FeatureCollection', features: shortcutsFeatures };
+    
+    console.log('Algorithm graph stats for', algorithm, ':', {
+      upwardsVertices: graphData.UpwardsGraph ? Object.keys(graphData.UpwardsGraph.Vertices || {}).length : 0,
+      downwardsVertices: graphData.DownwardsGraph ? Object.keys(graphData.DownwardsGraph.Vertices || {}).length : 0,
+      upwardsEdges: graphData.UpwardsGraph ? Object.keys(graphData.UpwardsGraph.Edges || {}).reduce((sum, from) => sum + Object.keys(graphData.UpwardsGraph.Edges[from] || {}).length, 0) : 0,
+      downwardsEdges: graphData.DownwardsGraph ? Object.keys(graphData.DownwardsGraph.Edges || {}).reduce((sum, from) => sum + Object.keys(graphData.DownwardsGraph.Edges[from] || {}).length, 0) : 0,
+      totalFeatures: features.length,
+      shortcutFeatures: shortcutsFeatures.length,
+      verticesMapSize: verticesMap.value.size
+    });
   } catch (error) {
     console.error('Failed to fetch and parse graph data:', error);
   }
@@ -335,9 +344,10 @@ onMounted(async () => {
   <GraphVisualization :geo-json-data="geoJsonData" :shortest-path="shortestPath" :path-shortcuts="pathShortcuts" :start-node="startNode"
     :end-node="endNode" :vertices-map="verticesMap" :selected-algorithm="selectedAlgorithm" :view-state="viewState"
     :blocked-edges="blockedEdges" :shortcuts-geo-json-data="shortcutsGeoJsonData" :show-shortcuts="showShortcuts"
-    :base-geo-json-data="baseGeoJsonData" @update:view-state="handleViewStateChange" @layer-click="handleLayerClick"
-    @edge-click="handleEdgeClick" />
-  <RouteSelector :geo-json-data="geoJsonData" :start-node="startNode" :end-node="endNode"
+    :base-geo-json-data="baseGeoJsonData" :show-vertices="showVertices" :show-edges="showEdges" 
+    :show-base-graph="showBaseGraph" :show-current-path="showCurrentPath"
+    @update:view-state="handleViewStateChange" @layer-click="handleLayerClick" @edge-click="handleEdgeClick" />
+  <RouteSelector :geo-json-data="geoJsonData" :vertices-map="verticesMap" :start-node="startNode" :end-node="endNode"
     @update:start-node="startNode = $event" @update:end-node="endNode = $event" />
   <div class="info-overlay">
     <div class="algorithm-selector">
@@ -355,9 +365,28 @@ onMounted(async () => {
     <p v-if="queryTimeMs">Query Time: {{ queryTimeMs.toFixed(2) }} ms</p>
     <p v-if="startNode && !endNode">Click a vertex to select end node.</p>
     <p v-if="!startNode">Click a vertex to select start node.</p>
-    <div class="layer-toggle">
-      <input type="checkbox" id="show-shortcuts" v-model="showShortcuts">
-      <label for="show-shortcuts">Show Shortcuts</label>
+    <div class="layer-controls">
+      <h4>Layers</h4>
+      <div class="layer-toggle">
+        <input type="checkbox" id="show-vertices" v-model="showVertices">
+        <label for="show-vertices">Show Vertices</label>
+      </div>
+      <div class="layer-toggle">
+        <input type="checkbox" id="show-edges" v-model="showEdges">
+        <label for="show-edges">Show Edges</label>
+      </div>
+      <div class="layer-toggle">
+        <input type="checkbox" id="show-shortcuts" v-model="showShortcuts">
+        <label for="show-shortcuts">Show Shortcuts</label>
+      </div>
+      <div class="layer-toggle">
+        <input type="checkbox" id="show-base-graph" v-model="showBaseGraph">
+        <label for="show-base-graph">Show Base Graph</label>
+      </div>
+      <div class="layer-toggle">
+        <input type="checkbox" id="show-current-path" v-model="showCurrentPath">
+        <label for="show-current-path">Show Current Path</label>
+      </div>
     </div>
   </div>
 </template>
@@ -379,6 +408,32 @@ onMounted(async () => {
 
     &:last-child {
       margin-bottom: 0;
+    }
+  }
+
+  .layer-controls {
+    margin-top: 10px;
+    border-top: 1px solid #ccc;
+    padding-top: 10px;
+
+    h4 {
+      margin: 0 0 5px 0;
+      font-size: 14px;
+    }
+  }
+
+  .layer-toggle {
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+
+    input[type="checkbox"] {
+      margin-right: 5px;
+    }
+
+    label {
+      font-size: 12px;
+      cursor: pointer;
     }
   }
 }

@@ -23,6 +23,7 @@ var (
 	cchInstance     *cch.CCH
 	chInstance      *ch.ContractionHierarchies
 	cchNetwork      *graph.Graph
+	originalNetwork *graph.Graph    // Store original unmodified network
 	originalWeights map[edgeKey]int // Store original edge weights
 	mu              sync.RWMutex
 )
@@ -54,14 +55,14 @@ func graphHandler(w http.ResponseWriter, r *http.Request) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	if cchNetwork == nil {
-		http.Error(w, "Graph not initialized", http.StatusInternalServerError)
+	if originalNetwork == nil {
+		http.Error(w, "Original graph not initialized", http.StatusInternalServerError)
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(cchNetwork); err != nil {
-		http.Error(w, "Failed to encode graph", http.StatusInternalServerError)
-		log.Printf("Error encoding graph: %v", err)
+	if err := json.NewEncoder(w).Encode(originalNetwork); err != nil {
+		http.Error(w, "Failed to encode original graph", http.StatusInternalServerError)
+		log.Printf("Error encoding original graph: %v", err)
 	}
 }
 
@@ -69,9 +70,18 @@ func loadAndPreprocess() {
 	name := "osm5.txt"
 	dataDir := "../../data/RoadNetworks"
 	fileSystem := os.DirFS(dataDir)
+
+	// Load original network for base graph endpoint
+	originalNetworkData, err := parser.NewNetworkFromFS(fileSystem, name)
+	if err != nil {
+		log.Fatalf("Failed to load original graph: %v", err)
+	}
+	originalNetwork = originalNetworkData.Network
+
+	// Load separate network for CCH preprocessing
 	network, err := parser.NewNetworkFromFS(fileSystem, name)
 	if err != nil {
-		log.Fatalf("Failed to load graph: %v", err)
+		log.Fatalf("Failed to load graph for preprocessing: %v", err)
 	}
 	log.Printf("File: %s, NumNodes: %d, NumEdges: %d", name, network.NumNodes, network.NumEdges)
 
@@ -100,7 +110,7 @@ func loadAndPreprocess() {
 	cchInst.Customize(cchNetwork)
 
 	// Preprocess CH
-	chFilePath := "../../data/preprocessed/ch_osm7.gob"
+	chFilePath := "../../data/preprocessed/ch_osm5.gob"
 	log.Printf("Attempting to load preprocessed CH from %s", chFilePath)
 	chFile, err := preprocessed_graph.ReadCHFile(chFilePath)
 	if err == nil {

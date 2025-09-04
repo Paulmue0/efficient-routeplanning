@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { DeckGL, Map as MapComponent } from '@vue-deckgl-suite/maplibre';
 import { GeoJsonLayer, ArcLayer } from '@vue-deckgl-suite/layers';
 
@@ -17,7 +17,11 @@ const props = defineProps({
   blockedEdges: Array,
   shortcutsGeoJsonData: Object, // New prop
   showShortcuts: Boolean, // New prop
-  baseGeoJsonData: Object // New prop
+  baseGeoJsonData: Object, // New prop
+  showVertices: Boolean,
+  showEdges: Boolean,
+  showBaseGraph: Boolean,
+  showCurrentPath: Boolean
 });
 
 const emit = defineEmits(['update:viewState', 'layerClick', 'edgeClick']);
@@ -108,6 +112,31 @@ const getShortestPathLineWidth = (feature) => {
   // Since shortcuts are now shown as arcs, shortest path layer only shows real edges
   return 5; // Default width for real path segments
 };
+
+// Computed properties to filter data based on layer visibility
+const filteredGeoJsonData = computed(() => {
+  if (!props.geoJsonData || !props.geoJsonData.features) return null;
+  
+  const filteredFeatures = props.geoJsonData.features.filter(feature => {
+    if (feature.properties.type === 'vertex') {
+      return props.showVertices;
+    } else if (feature.properties.type === 'edge') {
+      return props.showEdges;
+    }
+    return true;
+  });
+  
+  return {
+    type: 'FeatureCollection',
+    features: filteredFeatures
+  };
+});
+
+const filteredBaseGeoJsonData = computed(() => {
+  if (!props.showBaseGraph || !props.baseGeoJsonData || !props.baseGeoJsonData.features) return null;
+  
+  return props.baseGeoJsonData;
+});
 </script>
 
 <template>
@@ -115,20 +144,23 @@ const getShortestPathLineWidth = (feature) => {
     @on-hover="hoverInfo = $event">
     <MapComponent height="100vh" :style :center="[props.viewState.longitude, props.viewState.latitude]"
       :zoom="props.viewState.zoom" />
-    <GeoJsonLayer v-if="props.baseGeoJsonData" id="graph-layer" :data="props.baseGeoJsonData" pointType="circle"
+    <GeoJsonLayer v-if="filteredGeoJsonData" id="graph-layer" :data="filteredGeoJsonData" pointType="circle"
       :filled="true" :stroked="true" :pickable="true" :getFillColor="getFillColor" :getLineColor="getLineColor"
       @click="handleLayerClick" :getLineWidth="getLineWidth" lineWidthUnits="pixels" :getPointRadius="getPointRadius"
       pointRadiusUnits="pixels"
       :update-triggers="{ getFillColor: [props.startNode, props.endNode, hoverInfo], getPointRadius: [props.startNode, props.endNode, hoverInfo], getLineColor: [props.startNode, props.endNode, props.blockedEdges], getLineWidth: [props.startNode, props.endNode, props.blockedEdges] }" />
+    <GeoJsonLayer v-if="filteredBaseGeoJsonData" id="base-graph-layer" :data="filteredBaseGeoJsonData" pointType="circle"
+      :filled="true" :stroked="true" :pickable="false" :getFillColor="() => [128, 128, 128, 100]" :getLineColor="() => [64, 64, 64, 100]"
+      :getLineWidth="() => 1" lineWidthUnits="pixels" :getPointRadius="() => 2" pointRadiusUnits="pixels" />
     <ArcLayer
       v-if="(props.selectedAlgorithm === 'ch' || props.selectedAlgorithm === 'cch') && props.shortcutsGeoJsonData && props.showShortcuts"
       id="shortcuts-arc-layer" :data="props.shortcutsGeoJsonData.features"
       :getSourcePosition="d => d.geometry.coordinates[0]" :getTargetPosition="d => d.geometry.coordinates[1]"
       :getSourceColor="[255, 255, 0, 255]" :getTargetColor="[255, 255, 0, 255]" :getWidth="2" widthUnits="pixels"
       :pickable="false" />
-    <GeoJsonLayer v-if="props.shortestPath" id="shortest-path-layer" :data="props.shortestPath"
+    <GeoJsonLayer v-if="props.shortestPath && props.showCurrentPath" id="shortest-path-layer" :data="props.shortestPath"
       :getLineColor="getShortestPathLineColor" :getLineWidth="getShortestPathLineWidth" lineWidthUnits="pixels" />
-    <ArcLayer v-if="props.pathShortcuts" id="path-shortcuts-arc-layer" :data="props.pathShortcuts.features"
+    <ArcLayer v-if="props.pathShortcuts && props.showCurrentPath" id="path-shortcuts-arc-layer" :data="props.pathShortcuts.features"
       :getSourcePosition="d => d.geometry.coordinates[0]" :getTargetPosition="d => d.geometry.coordinates[1]"
       :getSourceColor="[255, 165, 0, 255]" :getTargetColor="[255, 165, 0, 255]" :getWidth="4" widthUnits="pixels"
       :pickable="true" />
