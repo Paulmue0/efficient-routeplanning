@@ -1,10 +1,10 @@
 # *json
 *.dot
-*.txt
-*.metis
-*.ordering
+# *.txt
+# *.metis
+# *.ordering
 /KaHIP
 .DS_Store
 /bak
-/data/*
-*.gob
+# /data/*
+# *.gob
