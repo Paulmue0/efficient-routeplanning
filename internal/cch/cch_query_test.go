@@ -2,13 +2,54 @@ package cch
 
 import (
 	"errors"
+	"log"
+	"os"
 	"reflect"
+	"slices"
 	"testing"
+	"time"
 
+	"github.com/PaulMue0/efficient-routeplanning/internal/parser"
 	"github.com/PaulMue0/efficient-routeplanning/internal/pathfinding"
 	graph "github.com/PaulMue0/efficient-routeplanning/pkg/collection/graph"
 )
 
+func TestOsm1Query(t *testing.T) {
+	t.Run("osm1 from 1 to 5", func(t *testing.T) {
+		name := "osm1.txt"
+		dataDir := "../../data/RoadNetworks"
+		fileSystem := os.DirFS(dataDir)
+		network, err := parser.NewNetworkFromFS(fileSystem, name)
+		if err != nil {
+			log.Fatalf("Failed to load graph: %v", err)
+		}
+		log.Printf("File: %s, NumNodes: %d, NumEdges: %d", name, network.NumNodes, network.NumEdges)
+
+		// Preprocess CCH
+		cchInst := NewCCH()
+		log.Println("Starting CCH preprocessing...")
+		start := time.Now()
+		err = cchInst.Preprocess(network.Network, "../../data/kaHIP/osm1.ordering")
+		if err != nil {
+			log.Fatalf("CCH preprocessing failed: %v", err)
+		}
+		duration := time.Since(start)
+		log.Printf("Finished CCH preprocessing in %s", duration)
+		cchInst.Customize(network.Network)
+
+		path, dist, _, err := cchInst.Query(1, 5)
+		if slices.Equal(path, []graph.VertexId{1, 2, 3, 4, 5}) {
+			t.Errorf("wrong path: Got %q Expected: %q", path, []graph.VertexId{1, 2, 3, 4, 5})
+		}
+		if dist != 5 {
+			t.Errorf("wrong path length. Got %f Expected %f", dist, 5.0)
+		}
+		if err != nil {
+
+			t.Error(err)
+		}
+	})
+}
 func TestCCHQuery(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -98,7 +139,7 @@ func TestCCHQuery(t *testing.T) {
 			g := buildGraph(tc.vertices, tc.edges)
 			cch := preprocessAndCustomizeCCH(t, g, tc.ordering)
 
-			path, weight, err := cch.Query(tc.source, tc.target)
+			path, weight, _, err := cch.Query(tc.source, tc.target)
 
 			if tc.expectError {
 				if err == nil {
@@ -123,4 +164,3 @@ func TestCCHQuery(t *testing.T) {
 		})
 	}
 }
-

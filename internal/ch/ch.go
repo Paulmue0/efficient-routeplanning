@@ -24,6 +24,8 @@ type ContractionHierarchies struct {
 	Priorities        *collection.PriorityQueue[graph.VertexId]
 	UpwardsGraph      *graph.Graph
 	DownwardsGraph    *graph.Graph
+	shortcutCache     map[graph.VertexId]int // Cache for shortcuts computation
+	cacheMu           sync.RWMutex
 }
 
 // NewContractionHierarchies creates and initializes a new ContractionHierarchies struct.
@@ -32,14 +34,15 @@ func NewContractionHierarchies() *ContractionHierarchies {
 	ed := collection.NewPriorityQueue[graph.VertexId]()
 	ug := graph.NewGraph()
 	dg := graph.NewGraph()
+	cache := make(map[graph.VertexId]int)
 
-	return &ContractionHierarchies{0, co, ed, ug, dg}
+	return &ContractionHierarchies{0, co, ed, ug, dg, cache, sync.RWMutex{}}
 }
 
 // Preprocess prepares the graph for fast queries by contracting vertices in an optimized order.
 // It iteratively finds batches of independent vertices and contracts them in parallel.
 func (c *ContractionHierarchies) Preprocess(g *graph.Graph) {
-	const batchSize = 128 // Default batch size for parallel contraction
+	const batchSize = 128
 	c.InitializePriority(g)
 
 	for len(g.Vertices) > 0 {
@@ -67,16 +70,22 @@ func (c *ContractionHierarchies) Preprocess(g *graph.Graph) {
 			for _, neighbor := range neighbors {
 				allNeighbors[neighbor.Id] = struct{}{}
 			}
+			// Clear cache for contracted vertex
+			c.cacheMu.Lock()
+			delete(c.shortcutCache, v)
+			c.cacheMu.Unlock()
 		}
 
 		c.contractBatch(g, independentSet, neighborsMap)
 
+		// Clear cache for affected neighbors
+		c.cacheMu.Lock()
 		for neighborId := range allNeighbors {
-			if _, ok := g.Vertices[neighborId]; ok {
-				newPrio := c.Priority(g, neighborId)
-				c.Priorities.UpdatePriority(neighborId, newPrio)
-			}
+			delete(c.shortcutCache, neighborId)
 		}
+		c.cacheMu.Unlock()
+
+		c.recomputeBatchNeighborPriorities(g, allNeighbors)
 	}
 }
 
@@ -140,14 +149,26 @@ func (c *ContractionHierarchies) findIndependentSet(g *graph.Graph, batchSize in
 // The process is parallelized by first calculating all necessary shortcuts concurrently.
 // Then, all graph modifications (adding shortcuts, removing vertices) are applied sequentially
 // to maintain data consistency.
-func (c *ContractionHierarchies) contractBatch(g *graph.Graph, vertices []graph.VertexId, neighborsMap map[graph.VertexId][]graph.Vertex) {
+// Protects global counter ShortcutsAdded
+var shortcutsMu sync.Mutex
+
+func (c *ContractionHierarchies) contractBatch(
+	g *graph.Graph,
+	vertices []graph.VertexId,
+	neighborsMap map[graph.VertexId][]graph.Vertex,
+) {
 	type shortcut struct {
 		from, to, via graph.VertexId
 		weight        int
 	}
-	shortcutsToAdd := make(chan shortcut, len(vertices)*5)
-	var wg sync.WaitGroup
 
+	var (
+		wg        sync.WaitGroup
+		mu        sync.Mutex
+		shortcuts []shortcut
+	)
+
+	// --- Phase 1: find shortcuts in parallel ---
 	for _, v := range vertices {
 		wg.Add(1)
 		go func(vertexId graph.VertexId) {
@@ -162,25 +183,28 @@ func (c *ContractionHierarchies) contractBatch(g *graph.Graph, vertices []graph.
 
 					costViaV := float64(incidentEdges[u.Id].Weight) + float64(incidentEdges[w.Id].Weight)
 
-					_, shortestPathCost, _, _ := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV)
-					if shortestPathCost < costViaV {
-						continue
-					}
-
-					_, _, _, err := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV, vertexId)
-					if err != nil {
-						shortcutsToAdd <- shortcut{from: u.Id, to: w.Id, via: vertexId, weight: int(costViaV)}
+					// Use optimized witness search instead of two Dijkstra calls
+					if !pathfinding.WitnessSearch(g, u.Id, w.Id, costViaV, vertexId) {
+						mu.Lock()
+						shortcuts = append(shortcuts, shortcut{
+							from: u.Id, to: w.Id, via: vertexId, weight: int(costViaV),
+						})
+						mu.Unlock()
 					}
 				}
 			}
 		}(v)
 	}
 	wg.Wait()
-	close(shortcutsToAdd)
 
-	for sc := range shortcutsToAdd {
+	// --- Phase 2: apply graph modifications sequentially ---
+	for _, sc := range shortcuts {
 		c.NumShortcutsAdded++
+
+		shortcutsMu.Lock()
 		ShortcutsAdded++
+		shortcutsMu.Unlock()
+
 		cost := sc.weight
 		addErr := g.AddEdge(sc.from, sc.to, cost, true, sc.via)
 		if addErr == graph.ErrEdgeAlreadyExists {
@@ -194,6 +218,7 @@ func (c *ContractionHierarchies) contractBatch(g *graph.Graph, vertices []graph.
 		}
 	}
 
+	// --- Phase 3: contract vertices ---
 	for _, v := range vertices {
 		c.ContractionOrder = append(c.ContractionOrder, v)
 		c.InsertInUpwardsOrDownwardsGraph(g, v)
@@ -204,39 +229,99 @@ func (c *ContractionHierarchies) contractBatch(g *graph.Graph, vertices []graph.
 }
 
 // InitializePriority computes the initial priority for every vertex in the graph and
-// populates the priority queue.
+// populates the priority queue - now parallelized for better performance.
 func (c *ContractionHierarchies) InitializePriority(g *graph.Graph) {
-	for _, v := range g.Vertices {
-		c.Priorities.PushWithPriority(v.Id, c.Priority(g, v.Id))
-	}
-}
-
-// UpdatePriorities recalculates the priority of all vertices in the graph in parallel
-// and updates their values in the priority queue.
-func (c *ContractionHierarchies) UpdatePriorities(g *graph.Graph) {
 	var wg sync.WaitGroup
-	newPriorities := make(chan struct {
+	results := make(chan struct {
 		id       graph.VertexId
 		priority float64
 	}, len(g.Vertices))
 
 	for _, v := range g.Vertices {
 		wg.Add(1)
-		go func(vertex graph.Vertex) {
+		go func(vertex graph.VertexId) {
 			defer wg.Done()
-			prio := c.Priority(g, vertex.Id)
-			newPriorities <- struct {
+			priority := c.Priority(g, vertex)
+			results <- struct {
 				id       graph.VertexId
 				priority float64
-			}{id: vertex.Id, priority: prio}
-		}(v)
+			}{id: vertex, priority: priority}
+		}(v.Id)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for r := range results {
+		c.Priorities.PushWithPriority(r.id, r.priority)
+	}
+}
+
+// recomputeBatchNeighborPriorities recalculates priorities for all neighbors
+// of the contracted batch in parallel and applies updates sequentially.
+func (c *ContractionHierarchies) recomputeBatchNeighborPriorities(
+	g *graph.Graph, allNeighbors map[graph.VertexId]struct{},
+) {
+	var wg sync.WaitGroup
+	results := make(chan struct {
+		id       graph.VertexId
+		priority float64
+	}, len(allNeighbors))
+
+	for neighborId := range allNeighbors {
+		if _, ok := g.Vertices[neighborId]; !ok {
+			continue // skip already contracted
+		}
+		wg.Add(1)
+		go func(n graph.VertexId) {
+			defer wg.Done()
+			prio := c.Priority(g, n)
+			results <- struct {
+				id       graph.VertexId
+				priority float64
+			}{id: n, priority: prio}
+		}(neighborId)
 	}
 
 	wg.Wait()
-	close(newPriorities)
+	close(results)
 
-	for p := range newPriorities {
-		c.Priorities.UpdatePriority(p.id, p.priority)
+	for r := range results {
+		c.Priorities.UpdatePriority(r.id, r.priority)
+	}
+}
+
+// recomputeNeighborPriorities recalculates priorities for a set of neighbor vertices
+// in parallel and applies updates to the priority queue sequentially.
+func (c *ContractionHierarchies) recomputeNeighborPriorities(g *graph.Graph, neighbors map[graph.VertexId]struct{}) {
+	var wg sync.WaitGroup
+	results := make(chan struct {
+		id       graph.VertexId
+		priority float64
+	}, len(neighbors))
+
+	for neighborId := range neighbors {
+		if _, ok := g.Vertices[neighborId]; !ok {
+			continue // skip already removed vertices
+		}
+		wg.Add(1)
+		go func(n graph.VertexId) {
+			defer wg.Done()
+			prio := c.Priority(g, n)
+			results <- struct {
+				id       graph.VertexId
+				priority float64
+			}{id: n, priority: prio}
+		}(neighborId)
+	}
+
+	wg.Wait()
+	close(results)
+
+	for r := range results {
+		c.Priorities.UpdatePriority(r.id, r.priority)
 	}
 }
 
@@ -247,6 +332,11 @@ func (c *ContractionHierarchies) Contract(g *graph.Graph, v graph.VertexId) {
 	c.Shortcuts(g, v, true)
 	c.ContractionOrder = append(c.ContractionOrder, v)
 	c.InsertInUpwardsOrDownwardsGraph(g, v)
+
+	// Clear cache
+	c.cacheMu.Lock()
+	delete(c.shortcutCache, v)
+	c.cacheMu.Unlock()
 
 	if err := g.RemoveVertex(v); err != nil {
 		panic(fmt.Sprintf("critical error removing vertex %v: %v.\n Edges: %v,\n Vertices %v", v, err, g.Edges[v], g.Vertices))
@@ -281,7 +371,18 @@ func (c *ContractionHierarchies) InsertInUpwardsOrDownwardsGraph(g *graph.Graph,
 // Shortcuts calculates the number of shortcuts required if vertex v were to be contracted.
 // A shortcut is an edge added between two neighbors of v to preserve shortest path distances.
 // If the insertFlag is true, it adds the necessary shortcuts to the graph.
+// Optimized to use witness search and caching.
 func (c *ContractionHierarchies) Shortcuts(g *graph.Graph, v graph.VertexId, insertFlag bool) int {
+	// Check cache first if not inserting
+	if !insertFlag {
+		c.cacheMu.RLock()
+		if cached, exists := c.shortcutCache[v]; exists {
+			c.cacheMu.RUnlock()
+			return cached
+		}
+		c.cacheMu.RUnlock()
+	}
+
 	shortcutsFound := 0
 	neighbors, _ := g.Neighbors(v)
 	incidentEdges := g.Edges[v]
@@ -293,13 +394,8 @@ func (c *ContractionHierarchies) Shortcuts(g *graph.Graph, v graph.VertexId, ins
 
 			costViaV := float64(incidentEdges[u.Id].Weight) + float64(incidentEdges[w.Id].Weight)
 
-			_, shortestPathCost, _, _ := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV)
-			if shortestPathCost < costViaV {
-				continue
-			}
-
-			_, _, _, err := pathfinding.DijkstraShortestPath(g, u.Id, w.Id, costViaV, v)
-			if err != nil {
+			// Use optimized witness search
+			if !pathfinding.WitnessSearch(g, u.Id, w.Id, costViaV, v) {
 				shortcutsFound++
 				if insertFlag {
 					c.NumShortcutsAdded++
@@ -316,28 +412,39 @@ func (c *ContractionHierarchies) Shortcuts(g *graph.Graph, v graph.VertexId, ins
 			}
 		}
 	}
+
+	// Cache result if not inserting
+	if !insertFlag {
+		c.cacheMu.Lock()
+		c.shortcutCache[v] = shortcutsFound
+		c.cacheMu.Unlock()
+	}
+
 	return shortcutsFound
 }
 
 // Priority calculates the contraction priority for a vertex v. The priority is a heuristic
 // used to decide the order of contraction. It is typically based on the edge difference,
 // which is the number of shortcuts added minus the number of edges removed.
+// Enhanced with additional factors for better performance.
 func (c *ContractionHierarchies) Priority(g *graph.Graph, v graph.VertexId) float64 {
 	degree, _ := g.Degree(v)
 	shortcuts := c.Shortcuts(g, v, false)
-	ed := c.EdgeDifference(g, v)
+	ed := shortcuts - degree
 
-	priority := float64(ed) + (float64(shortcuts) / (float64(degree) + 1.0))
+	// Add factor for contracted neighbors to prefer vertices with contracted neighbors
+	contractedNeighbors := 0
+	for neighbor := range g.Edges[v] {
+		if slices.Contains(c.ContractionOrder, neighbor) {
+			contractedNeighbors++
+		}
+	}
+
+	priority := float64(ed) +
+		(float64(shortcuts) / (float64(degree) + 1.0)) +
+		float64(contractedNeighbors)*0.5
 
 	return priority
-}
-
-// EdgeDifference computes the difference between the number of shortcuts that would be added
-// and the number of edges that would be removed if vertex v were contracted.
-func (c *ContractionHierarchies) EdgeDifference(g *graph.Graph, v graph.VertexId) int {
-	degree, _ := g.Degree(v)
-	shortcuts := c.Shortcuts(g, v, false)
-	return shortcuts - degree
 }
 
 // Query finds the shortest path between a source and a target vertex using the preprocessed
@@ -359,6 +466,22 @@ func (c *ContractionHierarchies) Query(source, target graph.VertexId) ([]graph.V
 	}
 
 	return unpackedPath, weight, nodesPopped, nil
+}
+
+// QueryNoUnpack finds the shortest path between a source and a target vertex using the preprocessed
+// contraction hierarchy. It performs a bidirectional Dijkstra search on the upward and downward
+// graphs and returns the resulting path without unpacking any shortcuts.
+func (c *ContractionHierarchies) QueryNoUnpack(source, target graph.VertexId) ([]graph.VertexId, float64, int, error) {
+	path, weight, nodesPopped, err := pathfinding.BiDirectionalDijkstraShortestPath(c.UpwardsGraph, c.DownwardsGraph, source, target)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("bidirectional Dijkstra failed: %w", err)
+	}
+
+	if len(path) == 0 {
+		return []graph.VertexId{}, weight, 0, nil
+	}
+
+	return path, weight, nodesPopped, nil
 }
 
 // unpackPath reconstructs the full shortest path from a path that may contain shortcuts.
