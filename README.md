@@ -12,13 +12,13 @@
   <img src="./efficient route planning.gif" alt="Project Demo GIF">
 </p>
 
-This project provides an interactive visualization platform for comparing pathfinding algorithms on real road networks. It implements and visualizes Contraction Hierarchies (CH), Customizable Contraction Hierarchies (CCH) and Dijkstra's algorithm.
+This project implements Contraction Hierarchies (CH), Customizable Contraction Hierarchies (CCH), and Dijkstra's algorithm for pathfinding on real road networks. It also provides an interactive visualization that highlights the paths and shortcuts of each algorithm.
 
 ## Features
 
+*   **Algorithm Implementations:** Complete implementations of Dijkstra, CH, and CCH for realistic road graphs.
 *   **Interactive Map Visualization:** WebGL-based rendering with `deck.gl` and `Vue.js` for dynamic map interactions.
-*   **Algorithm Comparison:** Visualize and compare pathfinding results from Dijkstra, CH, and CCH.
-*   **Hierarchical Structure Visualization:** Three-dimensional arc rendering to distinguish shortcut edges and hierarchical levels.
+*   **Hierarchical Structure Visualization:** Three-dimensional arc rendering to distinguish shortcut edges.
 *   **Geocoding Integration:** Search for locations by address or city and find the nearest graph vertex.
 *   **Performance Metrics:** Display real-time performance metrics for various algorithms.
 
@@ -59,7 +59,7 @@ A written report that summarizes my findings is found in `report.pdf`
 
 ## Demonstration
 
-Two short videos demonstrating the tool are available in `demo1.mov` and `demo2.mov`.  
+Two short videos demonstrating the tool are available in `demo1.mp4` and `demo2.mp4`.  
 
 - **Demo 1** visualizes the user taking a look at CH shortcuts as three-dimensional arcs, highlighting how CH computes its Graph.
 - **Demo 2** demonstrates the geocoding functionality, showing a query from "Denkendorf" to "Stetten" in Baden-Württemberg and mapping the result onto the road network for accurate pathfinding.
